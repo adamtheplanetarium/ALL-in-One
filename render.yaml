@@ -3,12 +3,12 @@
 services:
   # Backend API Service
   - type: web
-    name: email-portal-backend
-    env: node
+    name: ALL-in-One
+    env: python
     region: oregon
-    plan: free
-    buildCommand: cd backend && npm install && cd .. && pip install -r requirements.txt
-    startCommand: cd backend && npm start
+    plan: starter
+    buildCommand: bash build.sh
+    startCommand: bash start_web.sh
     envVars:
       - key: NODE_ENV
         value: production
