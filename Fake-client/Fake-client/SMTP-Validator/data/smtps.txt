@@ -1,0 +1,5 @@
+# SMTP Server List
+# Format: host:port:username:password
+# Example:
+# smtp.gmail.com:587:your-email@gmail.com:your-password
+

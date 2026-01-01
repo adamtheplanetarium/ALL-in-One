@@ -1,0 +1,37 @@
+# Credentials and sensitive data
+smtp.txt
+smtp_*.txt
+config.ini
+*.db
+
+# Email lists
+emailx.txt
+emails.txt
+recipients.txt
+from.txt
+from_*.txt
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

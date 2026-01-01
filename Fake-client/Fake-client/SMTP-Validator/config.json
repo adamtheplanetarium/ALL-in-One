@@ -1,0 +1,47 @@
+{
+    "imap": {
+        "host": "imap.mail.yahoo.com",
+        "port": 993,
+        "username": "boxer204@att.net",
+        "password": "lappbauhnrqhtpop",
+        "use_ssl": true
+    },
+    "smtp": {
+        "timeout": 10,
+        "threads": 100,
+        "retry_attempts": 1,
+        "rate_limit_delay": 0,
+        "retry_delay": 2
+    },
+    "message": {
+        "subject_template": "Email Delivery Test #{TRACKING_ID}",
+        "body_template": "------------------------------------\nSMTP DELIVERY VERIFICATION TEST\n------------------------------------\n\nThis is an automated test message.\n\nTest ID: {TRACKING_ID}\nSent From: {SMTP_HOST}:{SMTP_PORT}\nSender: {SMTP_USER}\nTimestamp: {TIMESTAMP}\n\nIf you received this message, the SMTP server is working correctly.\n\n------------------------------------\nAutomated by SMTP Validator v1.0\n------------------------------------"
+    },
+    "verification": {
+        "search_folders": [
+            "INBOX",
+            "Junk",
+            "Spam",
+            "[Gmail]/Spam",
+            "Bulk Mail"
+        ],
+        "match_sender": true,
+        "check_today_only": true,
+        "date_range_days": 1
+    },
+    "ui": {
+        "auto_check_after_send": false,
+        "show_detailed_logs": true,
+        "window_width": 1400,
+        "window_height": 900
+    },
+    "paths": {
+        "data_folder": "data",
+        "logs_folder": "logs",
+        "smtps_file": "data/smtps.txt",
+        "recipients_file": "data/recipients.txt",
+        "sent_log_file": "data/sent_log.json",
+        "verified_smtps_file": "data/verified_smtps.txt",
+        "failed_smtps_file": "data/failed_smtps.txt"
+    }
+}

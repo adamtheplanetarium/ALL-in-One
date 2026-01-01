@@ -1,0 +1,11 @@
+# Test SMTP servers in new format
+# Format: username:password:host:port
+
+marketing@khadraouitek.tn:Q%;,(eXqjFd?vG2:smtp.khadraouitek.tn:587
+lieven.burm@telenet.be:Pr@X1Mus.:smtp.telenet.be:587
+a.adouli@comem.tn:!47r0dzN4:mail.comem.tn:465
+annaliapergamo@salerno.pecfarmacisti.it:eJ2.9dobyets:smtps.sicurezzapostale.it:465
+info@sweetsmates.com:25403657326MuSe.:mail.kurumsaleposta.com:587
+c.kaynarca@sweetsmates.com:697094959720MuSe.:mail.kurumsaleposta.com:587
+rotor@nabp-ect.com:jezbyS-wubwir-1xaqjy:smtp.ionos.de:587
+andi@nabp-ect.com:Matjy9-xuqkyh-pokkyt:smtp.ionos.de:587
