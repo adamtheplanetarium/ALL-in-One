@@ -69,14 +69,28 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'ALL-in-One Email Portal API',
-    version: '1.0.0',
-    status: 'running'
+// Serve React Frontend (Production)
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/build');
+  
+  // Serve static files
+  app.use(express.static(frontendPath));
+  
+  // Handle React routing - return index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
   });
-});
+} else {
+  // Development - API info
+  app.get('/', (req, res) => {
+    res.json({ 
+      message: 'ALL-in-One Email Portal API',
+      version: '1.0.0',
+      status: 'running',
+      mode: 'development'
+    });
+  });
+}
 
 // Error handler (must be last)
 app.use(errorHandler);
