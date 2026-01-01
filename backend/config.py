@@ -22,12 +22,12 @@ class Config:
         'pool_recycle': 300,
     }
     
-    # Redis
-    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+    # Redis (optional - for background tasks)
+    REDIS_URL = os.environ.get('REDIS_URL', None)
     
-    # Celery
-    CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379/1')
+    # Celery (disabled without Redis)
+    CELERY_BROKER_URL = os.environ.get('REDIS_URL', None)
+    CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', None)
     CELERY_TASK_SERIALIZER = 'json'
     CELERY_RESULT_SERIALIZER = 'json'
     CELERY_ACCEPT_CONTENT = ['json']
@@ -58,8 +58,8 @@ class Config:
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE = int(os.environ.get('RATE_LIMIT_PER_MINUTE', 100))
     
-    # SocketIO
-    SOCKETIO_MESSAGE_QUEUE = REDIS_URL
+    # SocketIO (works without Redis on single instance)
+    SOCKETIO_MESSAGE_QUEUE = REDIS_URL  # None for single instance
     SOCKETIO_ASYNC_MODE = 'eventlet'
 
 
