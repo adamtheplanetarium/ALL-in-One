@@ -2,13 +2,13 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, Spin } from 'antd';
 import { AppProvider, useApp } from './context/AppContext';
-import Login from './components/Auth/Login';
-import MainLayout from './components/Layout/MainLayout';
-import Dashboard from './components/Dashboard/Dashboard';
-import SMTPManagement from './components/SMTP/SMTPManagement';
-import EmailListManagement from './components/Emails/EmailListManagement';
-import TemplateEditor from './components/Template/TemplateEditor';
-import CampaignSettings from './components/Campaign/CampaignSettings';
+import Login from './components/Auth';
+import MainLayout from './components/Layout';
+import Dashboard from './components/Dashboard';
+import SMTPManagement from './components/SMTP';
+import EmailListManagement from './components/Emails';
+import TemplateEditor from './components/Template';
+import CampaignSettings from './components/Campaign';
 
 const PrivateRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useApp();
