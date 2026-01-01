@@ -1,10 +1,11 @@
 """
-FROM Addresses API endpoints
+FROM Addresses API endpoints with Celery verification
 """
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db
 from models.email import FromAddress
+from models.smtp import SMTPServer
 
 bp = Blueprint('from_addresses', __name__)
 
@@ -109,11 +110,11 @@ def start_verification():
     
     Request body:
     {
-        "from_ids": ["id1", "id2"],  # FROM addresses to verify
-        "test_recipient": "test@example.com",  # Where to send test emails
-        "smtp_id": "smtp-id",  # SMTP to use for sending tests
+        "from_ids": [1, 2, 3],  # FROM addresses to verify
+        "smtp_id": 1,  # SMTP server to use for sending tests
         "imap_host": "imap.example.com",
-        "imap_username": "test@example.com",
+        "imap_port": 993,
+        "imap_email": "test@example.com",
         "imap_password": "password",
         "wait_time": 300  # Seconds to wait before checking (default 5 minutes)
     }
@@ -123,19 +124,96 @@ def start_verification():
         data = request.get_json()
         
         # Validate required fields
-        required = ['from_ids', 'test_recipient', 'smtp_id', 'imap_host', 'imap_username', 'imap_password']
+        required = ['from_ids', 'smtp_id', 'imap_host', 'imap_email', 'imap_password']
         if not all(k in data for k in required):
             return jsonify({'error': 'Missing required fields'}), 400
         
-        # TODO: Queue verification task to Celery
-        # For now, return success message
-        # from tasks.verification_tasks import verify_from_addresses
-        # task = verify_from_addresses.delay(verification_id)
+        # Get SMTP server
+        smtp = SMTPServer.query.get(data['smtp_id'])
+        if not smtp or smtp.user_id != user_id:
+            return jsonify({'error': 'SMTP server not found'}), 404
+        
+        # Prepare verification data
+        from utils.encryption import decrypt_password
+        
+        verification_data = {
+            'from_addresses': data['from_ids'],
+            'smtp_server': {
+                'host': smtp.host,
+                'port': smtp.port,
+                'username': smtp.username,
+                'password': decrypt_password(smtp.password_encrypted)
+            },
+            'imap_account': {
+                'host': data['imap_host'],
+                'port': data.get('imap_port', 993),
+                'email': data['imap_email'],
+                'password': data['imap_password']
+            },
+            'subject_prefix': 'Verification Test',
+            'wait_time': data.get('wait_time', 300)
+        }
+        
+        # Queue verification task to Celery
+        from tasks.verification_tasks import verify_from_addresses
+        task = verify_from_addresses.delay(verification_data)
         
         return jsonify({
-            'message': 'Verification started (feature in progress)',
+            'message': 'Verification started in background',
+            'task_id': task.id,
             'from_count': len(data['from_ids']),
-            'wait_time': data.get('wait_time', 300)
+            'wait_time': verification_data['wait_time']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/extract-from-inbox', methods=['POST'])
+@jwt_required()
+def extract_from_inbox():
+    """
+    Extract FROM addresses from IMAP inbox (one-time extraction)
+    
+    Request body:
+    {
+        "imap_host": "imap.example.com",
+        "imap_port": 993,
+        "imap_email": "test@example.com",
+        "imap_password": "password",
+        "lookback_hours": 24,
+        "max_emails": 500
+    }
+    """
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Validate required fields
+        required = ['imap_host', 'imap_email', 'imap_password']
+        if not all(k in data for k in required):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Prepare IMAP config
+        imap_config = {
+            'host': data['imap_host'],
+            'port': data.get('imap_port', 993),
+            'email': data['imap_email'],
+            'password': data['imap_password']
+        }
+        
+        lookback_hours = data.get('lookback_hours', 24)
+        max_emails = data.get('max_emails', 500)
+        
+        # Queue extraction task to Celery
+        from tasks.monitor_tasks import extract_from_addresses_once
+        task = extract_from_addresses_once.delay(imap_config, lookback_hours, max_emails)
+        
+        return jsonify({
+            'message': 'Extraction started in background',
+            'task_id': task.id,
+            'lookback_hours': lookback_hours,
+            'max_emails': max_emails
         }), 200
         
     except Exception as e:

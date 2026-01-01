@@ -1,10 +1,10 @@
 """
-Main Flask Application
+Main Flask Application with WebSocket Support
 """
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
-from flask_socketio import SocketIO
+from flask_jwt_extended import JWTManager, verify_jwt_in_request, get_jwt_identity
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from config import config
 from models import db
 from models.user import User
@@ -12,6 +12,9 @@ from models.smtp import SMTPServer
 from models.campaign import Campaign, Recipient
 from models.email import FromAddress, EmailTemplate, EmailLog, IMAPAccount
 import os
+import redis
+import json
+import threading
 
 
 # Initialize extensions
@@ -46,6 +49,62 @@ def create_app(config_name=None):
     app.register_blueprint(from_addresses.bp, url_prefix='/api/from-addresses')
     app.register_blueprint(templates.bp, url_prefix='/api/templates')
     app.register_blueprint(stats.bp, url_prefix='/api/stats')
+    
+    # WebSocket event handlers
+    @socketio.on('connect')
+    def handle_connect():
+        """Handle client connection"""
+        print(f'Client connected: {request.sid}')
+        emit('connected', {'status': 'connected', 'sid': request.sid})
+    
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """Handle client disconnection"""
+        print(f'Client disconnected: {request.sid}')
+    
+    @socketio.on('subscribe_campaign')
+    def handle_subscribe_campaign(data):
+        """Subscribe to campaign updates"""
+        campaign_id = data.get('campaign_id')
+        if campaign_id:
+            room = f'campaign_{campaign_id}'
+            join_room(room)
+            print(f'Client {request.sid} subscribed to campaign {campaign_id}')
+            emit('subscribed', {'campaign_id': campaign_id, 'room': room})
+    
+    @socketio.on('unsubscribe_campaign')
+    def handle_unsubscribe_campaign(data):
+        """Unsubscribe from campaign updates"""
+        campaign_id = data.get('campaign_id')
+        if campaign_id:
+            room = f'campaign_{campaign_id}'
+            leave_room(room)
+            print(f'Client {request.sid} unsubscribed from campaign {campaign_id}')
+            emit('unsubscribed', {'campaign_id': campaign_id})
+    
+    # Start Redis listener thread for campaign updates
+    def redis_listener():
+        """Listen for campaign updates from Redis pub/sub"""
+        redis_url = app.config.get('SOCKETIO_MESSAGE_QUEUE', 'redis://localhost:6379/0')
+        r = redis.from_url(redis_url)
+        pubsub = r.pubsub()
+        pubsub.subscribe('campaign_updates')
+        
+        print('Redis listener started...')
+        for message in pubsub.listen():
+            if message['type'] == 'message':
+                try:
+                    data = json.loads(message['data'])
+                    campaign_id = data.get('campaign_id')
+                    if campaign_id:
+                        room = f'campaign_{campaign_id}'
+                        socketio.emit('campaign_update', data, room=room)
+                except Exception as e:
+                    print(f'Error processing Redis message: {e}')
+    
+    # Start Redis listener in background thread
+    listener_thread = threading.Thread(target=redis_listener, daemon=True)
+    listener_thread.start()
     
     # Health check endpoint
     @app.route('/health')

@@ -1,14 +1,14 @@
 # Render Deployment Configuration
-# ALL-in-One Email Management Platform - FREE TIER OPTIMIZED
+# ALL-in-One Email Management Platform - PRODUCTION READY
 
 services:
-  # Web Service (Flask API)
+  # Web Service (Flask API + WebSocket)
   - type: web
     name: allinone-email-platform
     env: python
     runtime: python-3.11.0
     region: oregon
-    plan: free
+    plan: starter
     branch: main
     rootDir: backend
     buildCommand: "pip install -r requirements.txt"
@@ -27,68 +27,39 @@ services:
         fromDatabase:
           name: allinone-db
           property: connectionString
-      - key: SMTP_FAILURE_THRESHOLD
-        value: 10
-      - key: SMTP_SUCCESS_RESET_COUNT
-        value: 3
-      - key: DEFAULT_RETRY_COUNT
-        value: 5
-      - key: MAX_THREADS
-        value: 50
-      - key: DEFAULT_THREADS
-        value: 10
-      - key: DEFAULT_POLL_INTERVAL
-        value: 60
-      - key: RATE_LIMIT_PER_MINUTE
-        value: 100
-      - key: CORS_ORIGINS
-        value: "*"
-    envVars:
-      - key: FLASK_ENV
-        value: production
-      - key: SECRET_KEY
-        generateValue: true
-      - key: JWT_SECRET_KEY
-        generateValue: true
-      - key: ENCRYPTION_KEY
-        generateValue: true
-      - key: DATABASE_URL
-        fromDatabase:
-          name: allinone-db
-          property: connectionString
       - key: REDIS_URL
         fromService:
           name: allinone-redis
           type: redis
           property: connectionString
       - key: SMTP_FAILURE_THRESHOLD
-        value: 10
+        value: "10"
       - key: SMTP_SUCCESS_RESET_COUNT
-        value: 3
+        value: "3"
       - key: DEFAULT_RETRY_COUNT
-        value: 5
+        value: "5"
       - key: MAX_THREADS
-        value: 50
+        value: "50"
       - key: DEFAULT_THREADS
-        value: 10
+        value: "10"
       - key: DEFAULT_POLL_INTERVAL
-        value: 60
+        value: "60"
       - key: RATE_LIMIT_PER_MINUTE
-        value: 100
+        value: "100"
       - key: CORS_ORIGINS
         value: "*"
 
-  # Background Worker (Celery) - Disabled on free tier, uncomment for paid
-  # - type: worker
-  #   name: allinone-worker
-  #   env: python
-  #   runtime: python-3.11.0
-  #   region: oregon
-  #   plan: starter
-  #   branch: main
-  #   rootDir: backend
-  #   buildCommand: "pip install -r requirements.txt"
-  #   startCommand: "celery -A tasks.celery_app worker --loglevel=info --concurrency=4"
+  # Background Worker (Celery) - REQUIRED for background persistence
+  - type: worker
+    name: allinone-worker
+    env: python
+    runtime: python-3.11.0
+    region: oregon
+    plan: starter
+    branch: main
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A tasks.celery_app worker --loglevel=info --concurrency=4"
     envVars:
       - key: FLASK_ENV
         value: production
@@ -105,18 +76,24 @@ services:
           name: allinone-redis
           type: redis
           property: connectionString
+      - key: SMTP_FAILURE_THRESHOLD
+        value: "10"
+      - key: SMTP_SUCCESS_RESET_COUNT
+        value: "3"
+      - key: DEFAULT_RETRY_COUNT
+        value: "5"
 
 databases:
   # PostgreSQL Database
   - name: allinone-db
     databaseName: allinone
     user: allinone
-    plan: free
+    plan: starter
     region: oregon
 
-  # Redis Instance - Disabled on free tier, uncomment for paid
-  # - name: allinone-redis
-  #   plan: free
-  #   region: oregon
-  #   maxmemoryPolicy: allkeys-lru
-  #   ipAllowList: []
+  # Redis Instance - REQUIRED for Celery and distributed locks
+  - name: allinone-redis
+    plan: starter
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
