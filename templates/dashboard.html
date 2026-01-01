@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ALL-in-One Email Portal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Stats Cards -->
+    <div class="col-md-3 mb-4">
+        <div class="card stat-card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-uppercase mb-1">Emails Sent</h6>
+                        <h2 class="mb-0" id="totalSent">{{ stats.total_sent }}</h2>
+                    </div>
+                    <i class="bi bi-send-check-fill" style="font-size: 2.5rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card stat-card bg-danger text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-uppercase mb-1">Failed</h6>
+                        <h2 class="mb-0" id="totalFailed">{{ stats.total_failed }}</h2>
+                    </div>
+                    <i class="bi bi-x-circle-fill" style="font-size: 2.5rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card stat-card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-uppercase mb-1">Status</h6>
+                        <h2 class="mb-0" id="campaignStatus">{{ stats.status|upper }}</h2>
+                    </div>
+                    <i class="bi bi-Activity" style="font-size: 2.5rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card stat-card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-uppercase mb-1">Uptime</h6>
+                        <h2 class="mb-0" id="uptime">--:--</h2>
+                    </div>
+                    <i class="bi bi-clock-fill" style="font-size: 2.5rem; opacity: 0.5;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Campaign Control -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-play-circle"></i> Campaign Control</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-2 mb-3">
+                    <button class="btn btn-success btn-lg" id="startBtn" onclick="startCampaign()">
+                        <i class="bi bi-play-fill"></i> Start Campaign
+                    </button>
+                    <button class="btn btn-danger btn-lg" id="stopBtn" onclick="stopCampaign()" disabled>
+                        <i class="bi bi-stop-fill"></i> Stop Campaign
+                    </button>
+                </div>
+                <div id="campaignAlert"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Logs -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-terminal"></i> Live Logs</h5>
+            </div>
+            <div class="card-body">
+                <div id="logContainer" class="log-container">
+                    <div class="text-muted">Waiting for campaign to start...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const socket = io();
+
+socket.on('connect', function() {
+    console.log('Connected to server');
+});
+
+socket.on('campaign_log', function(data) {
+    addLog(data.message);
+});
+
+socket.on('campaign_stats', function(stats) {
+    updateStats(stats);
+});
+
+socket.on('campaign_stopped', function(stats) {
+    updateStats(stats);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    showAlert('Campaign stopped successfully', 'warning');
+});
+
+socket.on('campaign_completed', function(stats) {
+    updateStats(stats);
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    showAlert('Campaign completed!', 'success');
+});
+
+socket.on('campaign_error', function(data) {
+    showAlert('Error: ' + data.error, 'danger');
+});
+
+function startCampaign() {
+    fetch('/api/campaign/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('logContainer').innerHTML = '';
+            showAlert('Campaign started successfully!', 'success');
+        } else {
+            showAlert('Error: ' + data.error, 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('Error starting campaign: ' + err.message, 'danger');
+    });
+}
+
+function stopCampaign() {
+    fetch('/api/campaign/stop', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+        } else {
+            showAlert('Error: ' + data.error, 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('Error stopping campaign: ' + err.message, 'danger');
+    });
+}
+
+function updateStats(stats) {
+    document.getElementById('totalSent').textContent = stats.total_sent;
+    document.getElementById('totalFailed').textContent = stats.total_failed;
+    document.getElementById('campaignStatus').textContent = stats.status.toUpperCase();
+}
+
+function addLog(message) {
+    const logContainer = document.getElementById('logContainer');
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry';
+    logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.getElementById('campaignAlert');
+    alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+}
+
+// Load initial stats
+fetch('/api/campaign/stats')
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            updateStats(data.stats);
+            if (data.running) {
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+            }
+        }
+    });
+</script>
+{% endblock %}

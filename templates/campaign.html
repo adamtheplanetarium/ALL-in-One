@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Campaign Settings - ALL-in-One Email Portal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1><i class="bi bi-gear-fill"></i> Campaign Settings</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Configuration Settings</h5>
+            </div>
+            <div class="card-body">
+                <div id="alertContainer"></div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Domain From</label>
+                        <input type="text" class="form-control" id="domainfrom" placeholder="yourdomain.com">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Domain Authentication</label>
+                        <input type="text" class="form-control" id="domainauth" placeholder="auth.yourdomain.com">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Sleep Time (seconds)</label>
+                        <input type="number" class="form-control" id="sleeptime" placeholder="1">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Threads</label>
+                        <input type="number" class="form-control" id="threads" placeholder="5">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Emails File Path</label>
+                        <input type="text" class="form-control" id="emailspath" placeholder="emailx.txt">
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Working SMTP File</label>
+                        <input type="text" class="form-control" id="workingsmtp" placeholder="working_smtp.txt">
+                    </div>
+                </div>
+                
+                <button class="btn btn-success mt-3" onclick="saveConfig()">
+                    <i class="bi bi-save"></i> Save Configuration
+                </button>
+                <button class="btn btn-secondary mt-3" onclick="loadConfig()">
+                    <i class="bi bi-arrow-clockwise"></i> Reload
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadConfig() {
+    fetch('/api/config/get')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const config = data.config;
+                document.getElementById('domainfrom').value = config.domainfrom || '';
+                document.getElementById('domainauth').value = config.domain_authentication || '';
+                document.getElementById('sleeptime').value = config.sleeptime || '';
+                document.getElementById('threads').value = config.threads || '';
+                document.getElementById('emailspath').value = config.emailspath || '';
+                document.getElementById('workingsmtp').value = config.workingsmtp || '';
+            }
+        })
+        .catch(err => {
+            showAlert('Error loading configuration: ' + err.message, 'danger');
+        });
+}
+
+function saveConfig() {
+    const settings = {
+        domainfrom: document.getElementById('domainfrom').value,
+        domain_authentication: document.getElementById('domainauth').value,
+        sleeptime: document.getElementById('sleeptime').value,
+        threads: document.getElementById('threads').value,
+        emailspath: document.getElementById('emailspath').value,
+        workingsmtp: document.getElementById('workingsmtp').value
+    };
+    
+    fetch('/api/config/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({settings: settings})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+        } else {
+            showAlert('Error: ' + data.error, 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('Error saving: ' + err.message, 'danger');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.getElementById('alertContainer');
+    alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+}
+
+// Load on page load
+loadConfig();
+</script>
+{% endblock %}

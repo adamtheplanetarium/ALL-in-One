@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}SMTP Management - ALL-in-One Email Portal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1><i class="bi bi-server"></i> SMTP Management</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">SMTP Servers</h5>
+                <button class="btn btn-primary btn-sm" onclick="addServer()">
+                    <i class="bi bi-plus-circle"></i> Add Server
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="alertContainer"></div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Host</th>
+                                <th>Port</th>
+                                <th>Username</th>
+                                <th>Password</th>
+                                <th width="100">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="smtpTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button class="btn btn-success mt-3" onclick="saveServers()">
+                    <i class="bi bi-save"></i> Save All Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let servers = [];
+
+function loadServers() {
+    fetch('/api/smtp/list')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                servers = data.servers;
+                renderTable();
+            }
+        })
+        .catch(err => {
+            showAlert('Error loading SMTP servers: ' + err.message, 'danger');
+        });
+}
+
+function renderTable() {
+    const tbody = document.getElementById('smtpTableBody');
+    if (servers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No SMTP servers configured. Click "Add Server" to get started.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = servers.map((server, index) => `
+        <tr>
+            <td><input type="text" class="form-control" value="${server.host}" onchange="updateServer(${index}, 'host', this.value)"></td>
+            <td><input type="number" class="form-control" value="${server.port}" onchange="updateServer(${index}, 'port', this.value)"></td>
+            <td><input type="text" class="form-control" value="${server.username}" onchange="updateServer(${index}, 'username', this.value)"></td>
+            <td><input type="password" class="form-control" value="${server.password}" onchange="updateServer(${index}, 'password', this.value)"></td>
+            <td>
+                <button class="btn btn-danger btn-sm" onclick="deleteServer(${index})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function addServer() {
+    servers.push({
+        host: 'smtp.example.com',
+        port: '587',
+        username: 'user@example.com',
+        password: ''
+    });
+    renderTable();
+}
+
+function updateServer(index, field, value) {
+    servers[index][field] = value;
+}
+
+function deleteServer(index) {
+    if (confirm('Are you sure you want to delete this SMTP server?')) {
+        servers.splice(index, 1);
+        renderTable();
+    }
+}
+
+function saveServers() {
+    fetch('/api/smtp/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({servers: servers})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            loadServers();
+        } else {
+            showAlert('Error: ' + data.error, 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('Error saving: ' + err.message, 'danger');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.getElementById('alertContainer');
+    alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+}
+
+// Load on page load
+loadServers();
+</script>
+{% endblock %}

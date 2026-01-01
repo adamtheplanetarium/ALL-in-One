@@ -1,27 +1,18 @@
-# Render.com deployment configuration
-
 services:
-  # Full Stack Application (Backend + Frontend)
   - type: web
-    name: ALL-in-One
+    name: all-in-one-email-portal
     env: python
     region: oregon
     plan: starter
-    buildCommand: bash build.sh
-    startCommand: bash start_web.sh
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
       - key: PASSWORD
         value: "@OLDISGOLD2026@"
-      - key: SESSION_SECRET
-        generateValue: true
-      - key: PYTHON_PATH
-        value: python3
-      - key: BASIC_FOLDER_PATH
-        value: ../Basic
-      - key: CORS_ORIGIN
-        value: "*"
+      - key: PORT
+        value: 10000
     healthCheckPath: /api/health

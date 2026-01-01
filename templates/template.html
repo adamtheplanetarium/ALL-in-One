@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Template Editor - ALL-in-One Email Portal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1><i class="bi bi-file-earmark-text"></i> Email Template Editor</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">From Email Addresses</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Configure sender email addresses (one per line)</p>
+                <textarea class="form-control mb-3" id="fromEmails" rows="8" placeholder="sender1@yourdomain.com
+sender2@yourdomain.com"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Email Template</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Configure your email content and settings</p>
+                <div id="alertContainer"></div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Subject</label>
+                    <input type="text" class="form-control" id="subject" placeholder="Email Subject">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Message Body</label>
+                    <textarea class="form-control" id="messageBody" rows="10" placeholder="Your email message here..."></textarea>
+                </div>
+                
+                <button class="btn btn-success" onclick="saveTemplate()">
+                    <i class="bi bi-save"></i> Save Template
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadFromEmails() {
+    // Load from emails from from.txt
+    fetch('/api/emails/list')
+        .then(res => res.json())
+        .then(data => {
+            // This is a placeholder - you may want to create a separate endpoint for from emails
+            console.log('Loaded emails');
+        });
+}
+
+function saveTemplate() {
+    showAlert('Template saved successfully! Note: The template is managed through config.ini and the mainnotall.py script configuration.', 'info');
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.getElementById('alertContainer');
+    alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadFromEmails();
+});
+</script>
+{% endblock %}

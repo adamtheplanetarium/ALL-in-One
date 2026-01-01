@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Email List Management - ALL-in-One Email Portal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h1><i class="bi bi-people-fill"></i> Email List Management</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Recipient Email Addresses (<span id="emailCount">0</span> emails)</h5>
+            </div>
+            <div class="card-body">
+                <div id="alertContainer"></div>
+                <p class="text-muted">Add one email address per line</p>
+                <textarea class="form-control mb-3" id="emailList" rows="15" placeholder="user1@example.com
+user2@example.com
+user3@example.com"></textarea>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success" onclick="saveEmails()">
+                        <i class="bi bi-save"></i> Save Email List
+                    </button>
+                    <button class="btn btn-secondary" onclick="loadEmails()">
+                        <i class="bi bi-arrow-clockwise"></i> Reload
+                    </button>
+                    <button class="btn btn-danger" onclick="clearEmails()">
+                        <i class="bi bi-trash"></i> Clear All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadEmails() {
+    fetch('/api/emails/list')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('emailList').value = data.emails.join('\n');
+                updateCount();
+            }
+        })
+        .catch(err => {
+            showAlert('Error loading emails: ' + err.message, 'danger');
+        });
+}
+
+function saveEmails() {
+    const textarea = document.getElementById('emailList');
+    const emails = textarea.value.split('\n').filter(e => e.trim());
+    
+    fetch('/api/emails/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({emails: emails})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            updateCount();
+        } else {
+            showAlert('Error: ' + data.error, 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('Error saving: ' + err.message, 'danger');
+    });
+}
+
+function clearEmails() {
+    if (confirm('Are you sure you want to clear all email addresses?')) {
+        document.getElementById('emailList').value = '';
+        updateCount();
+    }
+}
+
+function updateCount() {
+    const textarea = document.getElementById('emailList');
+    const count = textarea.value.split('\n').filter(e => e.trim()).length;
+    document.getElementById('emailCount').textContent = count;
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.getElementById('alertContainer');
+    alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
+}
+
+// Auto-update count on input
+document.addEventListener('DOMContentLoaded', function() {
+    const textarea = document.getElementById('emailList');
+    textarea.addEventListener('input', updateCount);
+    loadEmails();
+});
+</script>
+{% endblock %}
