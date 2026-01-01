@@ -1,4 +1,0 @@
-# Recipient Email List
-# One email per line
-# Default tester email:
-boxer204@att.net

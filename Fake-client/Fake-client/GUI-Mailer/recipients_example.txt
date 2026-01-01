@@ -1,9 +1,0 @@
-# Sample recipients file
-# One email address per line
-
-# Example:
-# recipient1@example.com
-# recipient2@example.com
-# recipient3@example.com
-
-# Add your recipient emails below:

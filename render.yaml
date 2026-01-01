@@ -1,0 +1,48 @@
+# Render.com deployment configuration
+
+services:
+  # Backend API Service
+  - type: web
+    name: email-portal-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install && cd .. && pip install -r requirements.txt
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: PASSWORD
+        value: "@OLDISGOLD2026@"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PYTHON_PATH
+        value: python3
+      - key: BASIC_FOLDER_PATH
+        value: ../Basic
+      - key: CORS_ORIGIN
+        sync: false
+    healthCheckPath: /api/health
+
+  # Frontend Static Site
+  - type: web
+    name: email-portal-frontend
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/build
+    pullRequestPreviewsEnabled: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
