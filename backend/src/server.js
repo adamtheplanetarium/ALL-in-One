@@ -71,7 +71,9 @@ app.get('/api/health', (req, res) => {
 
 // Serve React Frontend (Production)
 if (process.env.NODE_ENV === 'production') {
-  const frontendPath = path.join(__dirname, '../../frontend/build');
+  const frontendPath = path.join(__dirname, '../../../frontend/build');
+  
+  console.log('Frontend path:', frontendPath);
   
   // Serve static files
   app.use(express.static(frontendPath));
