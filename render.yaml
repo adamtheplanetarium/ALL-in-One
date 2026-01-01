@@ -11,7 +11,7 @@ services:
     plan: starter
     branch: main
     buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "cd backend && gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app"
+    startCommand: "bash start_web.sh"
     healthCheckPath: /health
     envVars:
       - key: PYTHONPATH
@@ -59,7 +59,7 @@ services:
     plan: starter
     branch: main
     buildCommand: "pip install -r backend/requirements.txt"
-    startCommand: "cd backend && celery -A tasks.celery_app worker --loglevel=info --concurrency=4"
+    startCommand: "bash start_worker.sh"
     envVars:
       - key: PYTHONPATH
         value: /opt/render/project/src/backend
