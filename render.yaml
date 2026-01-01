@@ -85,6 +85,29 @@ services:
       - key: DEFAULT_RETRY_COUNT
         value: "5"
 
+  # Frontend Static Site (React)
+  - type: web
+    name: allinone-frontend
+    env: static
+    region: oregon
+    branch: main
+    buildCommand: "cd frontend && npm install && npm run build"
+    staticPublishPath: ./frontend/dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://all-in-one-tdxd.onrender.com
+
 databases:
   # PostgreSQL Database
   - name: allinone-db
