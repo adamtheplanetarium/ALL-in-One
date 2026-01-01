@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import { useApp } from '../../context/AppContext';
 import { campaignAPI, emailAPI, smtpAPI } from '../../services/api';
-import LogViewer from '../Logs/LogViewer';
+import LogViewer from '../Logs';
 import './Dashboard.css';
 
 const Dashboard = () => {
