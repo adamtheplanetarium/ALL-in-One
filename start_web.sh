@@ -1,4 +1,5 @@
 #!/bin/bash
 
 # Start script for Render deployment
-cd backend && node src/server.js
+# Stay in root directory to maintain proper paths
+node backend/src/server.js
