@@ -115,12 +115,15 @@ def get_smtp_list():
                     if line.strip():
                         parts = line.strip().split(',')
                         if len(parts) >= 4:
+                            status = parts[4] if len(parts) > 4 else 'inactive'
                             servers.append({
                                 'id': i,
                                 'host': parts[0].strip(),
                                 'port': parts[1].strip(),
                                 'username': parts[2].strip(),
-                                'password': parts[3].strip()
+                                'email': parts[2].strip(),
+                                'password': parts[3].strip(),
+                                'status': status.strip()
                             })
                 return jsonify({'success': True, 'servers': servers})
         return jsonify({'success': True, 'servers': []})
@@ -136,13 +139,97 @@ def save_smtp_list():
         
         smtp_file = os.path.join(BASIC_FOLDER, 'smtp.txt')
         with open(smtp_file, 'w') as f:
-            f.write('host,port,username,password\n')
+            f.write('host,port,username,password,status\n')
             for server in servers:
-                f.write(f"{server['host']},{server['port']},{server['username']},{server['password']}\n")
+                status = server.get('status', 'inactive')
+                email = server.get('username', server.get('email', ''))
+                f.write(f"{server['host']},{server['port']},{email},{server['password']},{status}\n")
         
         return jsonify({'success': True, 'message': 'SMTP servers saved successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/smtp/validate', methods=['POST'])
+@login_required
+def validate_smtp():
+    try:
+        data = request.get_json()
+        servers = data.get('servers', [])
+        
+        if not servers:
+            return jsonify({'success': False, 'error': 'No servers to validate'}), 400
+        
+        # Format servers for validation
+        accounts = []
+        for server in servers:
+            accounts.append({
+                'email': server.get('username', server.get('email', '')),
+                'password': server['password'],
+                'host': server['host'],
+                'port': server['port']
+            })
+        
+        # Start validation in background thread
+        thread = threading.Thread(target=run_smtp_validation, args=(accounts,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'success': True, 'message': 'Validation started'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def run_smtp_validation(accounts):
+    """Run SMTP validation in background"""
+    try:
+        from smtp_validator import validate_smtp_accounts
+        
+        def validation_callback(event):
+            if event['type'] == 'success':
+                socketio.emit('validation_log', {'message': f"✓ Sent test from {event['email']}"})
+            elif event['type'] == 'error':
+                socketio.emit('validation_log', {'message': f"✗ Failed {event['email']}: {event.get('error', 'Unknown')}"})
+            elif event['type'] == 'validated':
+                socketio.emit('validation_log', {'message': f"✓ Validated {event['email']} (found in {event['folder']})"})
+            elif event['type'] == 'info':
+                socketio.emit('validation_log', {'message': event['message']})
+            elif event['type'] == 'wait':
+                socketio.emit('validation_log', {'message': f"Waiting... {event['remaining']} seconds remaining"})
+            elif event['type'] == 'complete':
+                socketio.emit('validation_log', {'message': f"✅ Complete: {event['validated']}/{event['total']} validated"})
+            
+            # Update stats
+            stats = {
+                'total': len(accounts),
+                'completed': 0,
+                'validated': 0,
+                'failed': 0
+            }
+            socketio.emit('validation_stats', stats)
+        
+        validated = validate_smtp_accounts(accounts, validation_callback)
+        
+        # Update SMTP file with validation results
+        smtp_file = os.path.join(BASIC_FOLDER, 'smtp.txt')
+        if os.path.exists(smtp_file):
+            with open(smtp_file, 'r') as f:
+                lines = f.readlines()
+            
+            validated_emails = {acc['email'] for acc in validated}
+            
+            with open(smtp_file, 'w') as f:
+                f.write('host,port,username,password,status\n')
+                for line in lines[1:]:  # Skip header
+                    if line.strip():
+                        parts = line.strip().split(',')
+                        if len(parts) >= 4:
+                            email = parts[2]
+                            status = 'active' if email in validated_emails else 'inactive'
+                            f.write(f"{parts[0]},{parts[1]},{parts[2]},{parts[3]},{status}\n")
+        
+        socketio.emit('validation_complete', {'validated': len(validated), 'total': len(accounts)})
+        
+    except Exception as e:
+        socketio.emit('validation_log', {'message': f'Error: {str(e)}'})
 
 @app.route('/api/emails/list', methods=['GET'])
 @login_required
