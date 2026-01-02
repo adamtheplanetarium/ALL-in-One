@@ -180,32 +180,46 @@ def validate_smtp():
 
 def run_smtp_validation(accounts):
     """Run SMTP validation in background"""
+    validation_stats = {
+        'total': len(accounts),
+        'sent': 0,
+        'failed': 0,
+        'validated': 0
+    }
+    
     try:
         from smtp_validator import validate_smtp_accounts
         
         def validation_callback(event):
-            if event['type'] == 'success':
-                socketio.emit('validation_log', {'message': f"✓ Sent test from {event['email']}"})
-            elif event['type'] == 'error':
-                socketio.emit('validation_log', {'message': f"✗ Failed {event['email']}: {event.get('error', 'Unknown')}"})
-            elif event['type'] == 'validated':
-                socketio.emit('validation_log', {'message': f"✓ Validated {event['email']} (found in {event['folder']})"})
-            elif event['type'] == 'info':
-                socketio.emit('validation_log', {'message': event['message']})
-            elif event['type'] == 'wait':
-                socketio.emit('validation_log', {'message': f"Waiting... {event['remaining']} seconds remaining"})
-            elif event['type'] == 'complete':
-                socketio.emit('validation_log', {'message': f"✅ Complete: {event['validated']}/{event['total']} validated"})
-            
-            # Update stats
-            stats = {
-                'total': len(accounts),
-                'completed': 0,
-                'validated': 0,
-                'failed': 0
-            }
-            socketio.emit('validation_stats', stats)
+            try:
+                if event['type'] == 'success':
+                    validation_stats['sent'] += 1
+                    socketio.emit('validation_log', {'message': f"✓ Sent test from {event['email']}"})
+                    socketio.emit('validation_stats', validation_stats)
+                    
+                elif event['type'] == 'error':
+                    validation_stats['failed'] += 1
+                    socketio.emit('validation_log', {'message': f"✗ Failed {event['email']}: {event.get('error', 'Unknown')}"})
+                    socketio.emit('validation_stats', validation_stats)
+                    
+                elif event['type'] == 'validated':
+                    socketio.emit('validation_log', {'message': f"✓ Validated {event['email']} (found in {event['folder']})"})
+                    
+                elif event['type'] == 'info':
+                    socketio.emit('validation_log', {'message': event['message']})
+                    
+                elif event['type'] == 'wait':
+                    socketio.emit('validation_log', {'message': f"Waiting... {event['remaining']} seconds remaining"})
+                    
+                elif event['type'] == 'complete':
+                    validation_stats['validated'] = event['validated']
+                    socketio.emit('validation_log', {'message': f"✅ Complete: {event['validated']}/{event['total']} validated"})
+                    socketio.emit('validation_stats', validation_stats)
+                    
+            except Exception as e:
+                print(f"Callback error: {e}")
         
+        # Run validation
         validated = validate_smtp_accounts(accounts, validation_callback)
         
         # Update SMTP file with validation results
@@ -214,8 +228,13 @@ def run_smtp_validation(accounts):
             with open(smtp_file, 'r') as f:
                 lines = f.readlines()
             
-            validated_emails = {acc['email'] for acc in validated}
+            # Build set of validated emails
+            validated_emails = set()
+            for acc in validated:
+                if isinstance(acc, dict) and 'email' in acc:
+                    validated_emails.add(acc['email'])
             
+            # Write updated file
             with open(smtp_file, 'w') as f:
                 f.write('host,port,username,password,status\n')
                 for line in lines[1:]:  # Skip header
@@ -226,9 +245,11 @@ def run_smtp_validation(accounts):
                             status = 'active' if email in validated_emails else 'inactive'
                             f.write(f"{parts[0]},{parts[1]},{parts[2]},{parts[3]},{status}\n")
         
-        socketio.emit('validation_complete', {'validated': len(validated), 'total': len(accounts)})
+        # Emit completion event
+        socketio.emit('validation_complete', {'validated': len(validated_emails), 'total': len(accounts)})
         
     except Exception as e:
+        print(f"Validation error: {e}")
         socketio.emit('validation_log', {'message': f'Error: {str(e)}'})
 
 @app.route('/api/emails/list', methods=['GET'])

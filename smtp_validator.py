@@ -161,12 +161,20 @@ def check_imap_for_messages(callback=None):
                                     account = sent_tracking_ids[tracking_id]
                                     verified_accounts.append(account)
                                     if callback:
-                                        callback({'type': 'validated', 'email': account['email'], 'folder': folder})
+                                        try:
+                                            callback({'type': 'validated', 'email': account.get('email', 'Unknown'), 'folder': folder})
+                                        except Exception as cb_err:
+                                            print(f"Callback error: {cb_err}")
                                     
                     except Exception as e:
                         continue
                         
             except Exception as e:
+                if callback:
+                    try:
+                        callback({'type': 'info', 'message': f'Skipping folder {folder}'})
+                    except:
+                        pass
                 continue
         
         mail.close()
@@ -205,11 +213,19 @@ def validate_smtp_accounts(accounts, callback=None):
     unique_verified = []
     seen_emails = set()
     for account in verified_accounts:
-        if account['email'] not in seen_emails:
-            unique_verified.append(account)
-            seen_emails.add(account['email'])
+        try:
+            email = account.get('email', '') if isinstance(account, dict) else ''
+            if email and email not in seen_emails:
+                unique_verified.append(account)
+                seen_emails.add(email)
+        except Exception as e:
+            print(f"Error processing account: {e}")
+            continue
     
     if callback:
-        callback({'type': 'complete', 'validated': len(unique_verified), 'total': len(accounts)})
+        try:
+            callback({'type': 'complete', 'validated': len(unique_verified), 'total': len(accounts)})
+        except Exception as e:
+            print(f"Callback error on complete: {e}")
     
     return unique_verified
