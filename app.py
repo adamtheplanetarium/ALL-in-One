@@ -344,9 +344,9 @@ def get_from_emails():
         from_file = os.path.join(BASIC_FOLDER, 'from.txt')
         if os.path.exists(from_file):
             with open(from_file, 'r') as f:
-                emails = [line.strip() for line in f if line.strip() and '@' in line]
-                return jsonify({'success': True, 'emails': emails, 'count': len(emails)})
-        return jsonify({'success': True, 'emails': [], 'count': 0})
+                count = sum(1 for line in f if line.strip() and '@' in line)
+                return jsonify({'success': True, 'count': count})
+        return jsonify({'success': True, 'count': 0})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -417,9 +417,9 @@ def get_recipients():
         recipients_file = os.path.join(BASIC_FOLDER, 'emailx.txt')
         if os.path.exists(recipients_file):
             with open(recipients_file, 'r') as f:
-                emails = [line.strip() for line in f if line.strip() and '@' in line]
-                return jsonify({'success': True, 'emails': emails, 'count': len(emails)})
-        return jsonify({'success': True, 'emails': [], 'count': 0})
+                count = sum(1 for line in f if line.strip() and '@' in line)
+                return jsonify({'success': True, 'count': count})
+        return jsonify({'success': True, 'count': 0})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
