@@ -72,4 +72,32 @@ window.appUtils = {
     stopAutoRefresh
 };
 
+// Initialize Socket.IO connection
+try {
+    if (typeof io !== 'undefined') {
+        window.socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5
+        });
+        
+        socket.on('connect', function() {
+            console.log('✅ Socket.IO connected');
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('⚠️ Socket.IO disconnected');
+        });
+        
+        socket.on('connect_error', function(error) {
+            console.error('❌ Socket.IO connection error:', error);
+        });
+    } else {
+        console.warn('Socket.IO library not loaded');
+    }
+} catch (error) {
+    console.error('Error initializing Socket.IO:', error);
+}
+
 console.log('ALL-in-One Email Portal loaded successfully');
