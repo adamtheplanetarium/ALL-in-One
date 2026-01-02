@@ -28,6 +28,16 @@ campaign_stats = {
 campaign_logs = []  # Store campaign logs
 campaign_lock = threading.Lock()
 
+# Monitored email data (from external email monitoring)
+monitored_data = {
+    'total_accounts': 0,
+    'total_emails': 0,
+    'unique_froms': 0,
+    'accounts': {},  # account_name: {from_emails: [], emails: [], last_email: ''}
+    'last_update': None
+}
+monitored_lock = threading.Lock()
+
 PASSWORD = os.getenv('PASSWORD', '@OLDISGOLD2026@')
 BASIC_FOLDER = 'Basic'
 
@@ -701,6 +711,170 @@ def update_smtp_sent_counts(smtp_stats):
                         f.write(f"{parts[0]},{parts[1]},{parts[2]},{parts[3]},{status},{new_sent}\n")
     except Exception as e:
         print(f"Error updating SMTP counts: {e}")
+
+# Email Monitoring API Endpoints
+EMAIL_API_KEY = os.getenv('EMAIL_API_KEY', 'your-secure-api-key-here')
+
+def verify_api_key():
+    """Verify API key from request headers"""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return False
+    token = auth_header.replace('Bearer ', '')
+    return token == EMAIL_API_KEY
+
+@app.route('/api/initial_scan', methods=['POST'])
+def initial_scan():
+    """Receive all accounts and emails on startup"""
+    if not verify_api_key():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    try:
+        data = request.json
+        with monitored_lock:
+            monitored_data['total_accounts'] = data.get('total_accounts', 0)
+            monitored_data['total_emails'] = data.get('total_emails', 0)
+            monitored_data['last_update'] = datetime.now().isoformat()
+            
+            # Process accounts
+            accounts_data = data.get('accounts', [])
+            for account in accounts_data:
+                account_name = account.get('account_name')
+                monitored_data['accounts'][account_name] = {
+                    'from_emails': account.get('from_emails', []),
+                    'emails': account.get('emails', []),
+                    'email_count': len(account.get('emails', [])),
+                    'from_count': len(account.get('from_emails', [])),
+                    'last_email': account['emails'][0]['date'] if account.get('emails') else None
+                }
+            
+            # Calculate unique from emails across all accounts
+            all_froms = set()
+            for account in monitored_data['accounts'].values():
+                all_froms.update(account['from_emails'])
+            monitored_data['unique_froms'] = len(all_froms)
+        
+        print(f"✅ Initial scan received: {monitored_data['total_accounts']} accounts, {monitored_data['total_emails']} emails")
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        print(f"❌ Error processing initial scan: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/new_email', methods=['POST'])
+def new_email():
+    """Receive real-time new email notifications"""
+    if not verify_api_key():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    try:
+        data = request.json
+        account_name = data.get('account_name')
+        
+        with monitored_lock:
+            if account_name not in monitored_data['accounts']:
+                monitored_data['accounts'][account_name] = {
+                    'from_emails': [],
+                    'emails': [],
+                    'email_count': 0,
+                    'from_count': 0,
+                    'last_email': None
+                }
+            
+            # Add new from email if unique
+            from_email = data.get('from_email')
+            if from_email and from_email not in monitored_data['accounts'][account_name]['from_emails']:
+                monitored_data['accounts'][account_name]['from_emails'].append(from_email)
+                monitored_data['accounts'][account_name]['from_count'] += 1
+            
+            # Add email to account
+            email_data = {
+                'from_email': from_email,
+                'from_raw': data.get('from_raw'),
+                'to': data.get('to'),
+                'subject': data.get('subject'),
+                'date': data.get('date'),
+                'timestamp': data.get('timestamp')
+            }
+            monitored_data['accounts'][account_name]['emails'].append(email_data)
+            monitored_data['accounts'][account_name]['email_count'] += 1
+            monitored_data['accounts'][account_name]['last_email'] = data.get('date')
+            
+            # Update totals
+            monitored_data['total_emails'] += 1
+            monitored_data['last_update'] = datetime.now().isoformat()
+            
+            # Recalculate unique froms
+            all_froms = set()
+            for account in monitored_data['accounts'].values():
+                all_froms.update(account['from_emails'])
+            monitored_data['unique_froms'] = len(all_froms)
+        
+        print(f"📧 New email received: {account_name} - {from_email} - {data.get('subject')}")
+        
+        # Emit to connected clients via SocketIO
+        socketio.emit('new_monitored_email', {
+            'account': account_name,
+            'from': from_email,
+            'subject': data.get('subject'),
+            'timestamp': data.get('timestamp')
+        })
+        
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        print(f"❌ Error processing new email: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/heartbeat', methods=['POST'])
+def heartbeat():
+    """Optional: Status update every 10 checks"""
+    if not verify_api_key():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    try:
+        data = request.json
+        print(f"💓 Heartbeat: {data.get('check_count')} checks, {data.get('new_emails_detected')} new emails")
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/monitoring_summary', methods=['POST'])
+def monitoring_summary():
+    """Optional: Final stats when stopped"""
+    if not verify_api_key():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    try:
+        data = request.json
+        print(f"📊 Monitoring Summary: {data.get('total_checks')} checks, {data.get('new_emails_detected')} new, {data.get('total_emails_tracked')} total")
+        return jsonify({'status': 'success'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/monitored/froms', methods=['GET'])
+@login_required
+def get_monitored_froms():
+    """Get monitored from emails for display in UI"""
+    try:
+        with monitored_lock:
+            accounts_list = []
+            for account_name, account_data in monitored_data['accounts'].items():
+                accounts_list.append({
+                    'account_name': account_name,
+                    'from_count': account_data['from_count'],
+                    'email_count': account_data['email_count'],
+                    'last_email': account_data['last_email']
+                })
+            
+            return jsonify({
+                'success': True,
+                'total_accounts': monitored_data['total_accounts'],
+                'total_emails': monitored_data['total_emails'],
+                'unique_froms': monitored_data['unique_froms'],
+                'last_update': monitored_data['last_update'],
+                'accounts': accounts_list
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # WebSocket events
 @socketio.on('connect')
