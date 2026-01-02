@@ -487,7 +487,7 @@ def clear_recipients():
 @app.route('/api/campaign/start', methods=['POST'])
 @login_required
 def start_campaign():
-    global campaign_process, campaign_running, campaign_stats
+    global campaign_process, campaign_running, campaign_stats, campaign_logs
     
     if campaign_running:
         return jsonify({'success': False, 'error': 'Campaign already running'}), 400
@@ -551,16 +551,15 @@ def start_campaign():
         with open(html_file, 'rb') as f:
             html_content = f.read().decode('utf-8')
         
+        # Initialize campaign state
         campaign_stats = {
             'total_sent': 0,
             'total_failed': 0,
             'start_time': datetime.now().isoformat(),
             'status': 'running'
         }
-        
-        with campaign_lock:
-            campaign_logs = []  # Clear previous logs
-            campaign_running = True
+        campaign_logs = []  # Clear previous logs
+        campaign_running = True
         
         # Start the campaign in a separate thread (non-daemon so it continues after browser closes)
         thread = threading.Thread(
