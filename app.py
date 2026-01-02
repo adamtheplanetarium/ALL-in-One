@@ -659,6 +659,14 @@ def run_campaign_background(recipients, from_emails, smtp_servers, html_content,
                     campaign_stats['total_failed'] = event['failed']
                 socketio.emit('campaign_stats', {'sent': event['sent'], 'failed': event['failed']})
                 
+            elif event['type'] == 'from_count_update':
+                # Update from email count in real-time
+                socketio.emit('from_count_update', {
+                    'total': event['total'],
+                    'used': event['used'],
+                    'remaining': event['remaining']
+                })
+                
             elif event['type'] == 'complete':
                 # Update SMTP sent counts in smtp.txt
                 update_smtp_sent_counts(event.get('smtp_stats', {}))

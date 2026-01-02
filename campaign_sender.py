@@ -56,7 +56,18 @@ class CampaignSender:
             from_email = from_emails[self.from_index]
             self.from_index += 1
             # Track this from email as used
+            was_new = from_email not in self.used_from_emails
             self.used_from_emails.add(from_email)
+            
+            # Notify about from email count change if this is a new one
+            if was_new and self.callback:
+                remaining = len(from_emails) - len(self.used_from_emails)
+                self.callback({
+                    'type': 'from_count_update',
+                    'total': len(from_emails),
+                    'used': len(self.used_from_emails),
+                    'remaining': remaining
+                })
         return from_email
     
     def get_next_smtp(self, smtp_servers):

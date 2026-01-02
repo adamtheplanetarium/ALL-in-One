@@ -333,13 +333,19 @@ function initCampaignSocket() {
             updateStats(data);
         });
         
+        campaignSocket.on('from_count_update', function(data) {
+            // Update from email count in real-time as emails are used
+            document.getElementById('fromCount').textContent = data.remaining;
+            document.getElementById('fromCountLarge').textContent = data.remaining.toLocaleString();
+        });
+        
         campaignSocket.on('campaign_complete', function(data) {
             campaignRunning = false;
             document.getElementById('startBtn').style.display = 'inline-block';
             document.getElementById('stopBtn').style.display = 'none';
             addConsoleLog(`Campaign completed! Sent: ${data.sent}, Failed: ${data.failed}`, 'success');
             
-            // Refresh from email count to show removed emails
+            // Refresh from email count to show final count after removal
             setTimeout(() => {
                 loadFromEmails();
             }, 1000);
