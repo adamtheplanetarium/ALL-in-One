@@ -18,11 +18,14 @@ class CampaignSender:
         self.total_failed = 0
         self.running = False
         self.smtp_stats = {}  # Track sent count per SMTP
+        self.smtp_failures = {}  # Track failure count per SMTP
+        self.disabled_smtps = set()  # Track disabled SMTPs
         self.smtp_lock = threading.Lock()
         self.from_index = 0
         self.recipient_index = 0
         self.from_file_path = from_file_path
         self.used_from_emails = set()  # Track used from emails
+        self.max_smtp_failures = 5  # Disable SMTP after 5 failures
         
     def log(self, message, log_type='info'):
         """Send log message via callback"""
@@ -57,8 +60,13 @@ class CampaignSender:
         return from_email
     
     def get_next_smtp(self, smtp_servers):
-        """Get next active SMTP server (round-robin)"""
-        active_smtps = [s for s in smtp_servers if s.get('status') == 'active']
+        """Get next active SMTP server (round-robin), skip disabled ones"""
+        # Filter active SMTPs that are not disabled
+        active_smtps = [
+            s for s in smtp_servers 
+            if s.get('status') == 'active' and s['username'] not in self.disabled_smtps
+        ]
+        
         if not active_smtps:
             return None
         
@@ -73,6 +81,17 @@ class CampaignSender:
         """Increment sent counter for SMTP"""
         with self.smtp_lock:
             self.smtp_stats[smtp_username] = self.smtp_stats.get(smtp_username, 0) + 1
+    
+    def increment_smtp_failure(self, smtp_username):
+        """Increment failure counter for SMTP and disable if threshold reached"""
+        with self.smtp_lock:
+            self.smtp_failures[smtp_username] = self.smtp_failures.get(smtp_username, 0) + 1
+            
+            if self.smtp_failures[smtp_username] >= self.max_smtp_failures:
+                self.disabled_smtps.add(smtp_username)
+                self.log(f"⚠️ SMTP {smtp_username} DISABLED after {self.smtp_failures[smtp_username]} failures", 'warning')
+                return True
+        return False
     
     def get_smtp_stats(self):
         """Get SMTP statistics"""
@@ -140,6 +159,7 @@ class CampaignSender:
             
         except smtplib.SMTPAuthenticationError as e:
             self.total_failed += 1
+            self.increment_smtp_failure(smtp_server['username'])
             self.update_stats()
             error_msg = f"✗ FAILED {recipient} | SMTP Auth Failed: {smtp_server['username']}"
             self.log(error_msg, 'error')
@@ -147,6 +167,7 @@ class CampaignSender:
             
         except Exception as e:
             self.total_failed += 1
+            self.increment_smtp_failure(smtp_server['username'])
             self.update_stats()
             error_msg = f"✗ FAILED {recipient} | Error: {str(e)[:100]}"
             self.log(error_msg, 'error')
@@ -181,14 +202,18 @@ class CampaignSender:
                     self.log("No from emails available", 'error')
                     break
                 
-                # Get next SMTP (round-robin across recipients)
+                # Get next SMTP (round-robin across recipients, skip disabled)
                 smtp_server = self.get_next_smtp(smtp_servers)
                 if not smtp_server:
-                    self.log("No active SMTP servers available", 'error')
+                    self.log("No active SMTP servers available (all may be disabled)", 'error')
                     break
                 
                 # Send email
                 self.send_email(recipient, from_email, smtp_server, html_content, subject, sender_name)
+        
+        # Log final SMTP statistics
+        if self.disabled_smtps:
+            self.log(f"Campaign ended with {len(self.disabled_smtps)} SMTP(s) disabled due to failures", 'warning')
         
         # Remove used from emails from file
         if self.from_file_path and self.used_from_emails:
