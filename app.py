@@ -1123,8 +1123,8 @@ def run_sending_campaign():
     
     try:
         socketio.emit('sending_campaign_log', {
-            'message': 'Campaign started',
-            'type': 'success'
+            'message': '🚀 Initializing campaign...',
+            'type': 'info'
         })
         
         # Load settings
@@ -1134,20 +1134,51 @@ def run_sending_campaign():
         
         from_source = config.get('sending', 'from_source', fallback='active')
         sender_name = config.get('sending', 'sender_name', fallback='')
-        subject = config.get('sending', 'subject', fallback='')
+        subject = config.get('sending', 'subject', fallback='No Subject')
         message = config.get('sending', 'message', fallback='')
         sleep_time = config.getint('sending', 'sleep_time', fallback=1)
         threads = config.getint('sending', 'threads', fallback=1)
         
+        socketio.emit('sending_campaign_log', {
+            'message': f'📋 Settings loaded: from_source={from_source}, subject={subject}',
+            'type': 'info'
+        })
+        
         # Load recipients
+        if not os.path.exists(sending_recipients_file):
+            socketio.emit('sending_campaign_log', {
+                'message': '❌ No recipients file found. Add recipients in Recipients tab.',
+                'type': 'error'
+            })
+            sending_campaign_running = False
+            return
+            
         with open(sending_recipients_file, 'r') as f:
             recipients = [line.strip() for line in f if line.strip()]
+        
+        if not recipients:
+            socketio.emit('sending_campaign_log', {
+                'message': '❌ No recipients found. Add recipients in Recipients tab.',
+                'type': 'error'
+            })
+            sending_campaign_running = False
+            return
+        
+        socketio.emit('sending_campaign_log', {
+            'message': f'📧 Loaded {len(recipients)} recipient(s)',
+            'type': 'info'
+        })
         
         # Get from emails based on source and filter by status
         with monitored_lock:
             all_from_emails = []
             for account_data in monitored_data['accounts'].values():
                 all_from_emails.extend(account_data['from_emails'])
+        
+        socketio.emit('sending_campaign_log', {
+            'message': f'📬 Found {len(all_from_emails)} total from emails',
+            'type': 'info'
+        })
         
         # Filter based on from_source setting
         filtered_from_emails = []
@@ -1162,20 +1193,16 @@ def run_sending_campaign():
         
         if not filtered_from_emails:
             socketio.emit('sending_campaign_log', {
-                'message': f'No {from_source} from emails available',
+                'message': f'❌ No {from_source} from emails available. Check Active/Inactive Froms tabs.',
                 'type': 'error'
             })
             sending_campaign_running = False
             return
         
         socketio.emit('sending_campaign_log', {
-            'message': f'Starting round-robin sending: {len(filtered_from_emails)} {from_source} froms → {len(recipients)} recipients',
-            'type': 'info'
+            'message': f'✅ Filtered to {len(filtered_from_emails)} {from_source} from email(s)',
+            'type': 'success'
         })
-        
-        # Round-robin sending
-        sent_count = 0
-        from_index = 0
         
         # Load SMTP servers from Check Froms
         smtp_file = os.path.join('Basic', 'smtp.txt')
@@ -1194,12 +1221,25 @@ def run_sending_campaign():
         
         if not smtp_servers:
             socketio.emit('sending_campaign_log', {
-                'message': 'No SMTP servers available. Add SMTP servers in Check Froms tab.',
+                'message': '❌ No SMTP servers available. Add SMTP servers in Check Froms → SMTP tab.',
                 'type': 'error'
             })
             sending_campaign_running = False
             return
         
+        socketio.emit('sending_campaign_log', {
+            'message': f'📮 Loaded {len(smtp_servers)} SMTP server(s)',
+            'type': 'info'
+        })
+        
+        socketio.emit('sending_campaign_log', {
+            'message': f'🎯 Starting round-robin: {len(filtered_from_emails)} froms → {len(recipients)} recipients',
+            'type': 'info'
+        })
+        
+        # Round-robin sending
+        sent_count = 0
+        from_index = 0
         smtp_index = 0  # For round-robin SMTP selection
         
         for recipient in recipients:
