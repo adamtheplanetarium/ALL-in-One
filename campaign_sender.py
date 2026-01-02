@@ -153,7 +153,7 @@ class CampaignSender:
             return False
     
     def send_campaign(self, recipients, from_emails, smtp_servers, html_content, subject, sender_name):
-        """Send campaign to all recipients"""
+        """Send campaign to all from emails by cycling through recipients"""
         self.running = True
         self.total_sent = 0
         self.total_failed = 0
@@ -161,26 +161,34 @@ class CampaignSender:
         self.used_from_emails = set()
         
         self.log(f"Starting campaign: {len(recipients)} recipients, {len(from_emails)} from emails, {len([s for s in smtp_servers if s.get('status') == 'active'])} active SMTPs", 'info')
+        self.log(f"Will cycle through {len(recipients)} recipients until all {len(from_emails)} from emails are used", 'info')
         
-        for recipient in recipients:
-            if not self.running:
-                self.log("Campaign stopped by user", 'warning')
-                break
-            
-            # Get next from email (round-robin across all from emails)
-            from_email = self.get_next_from_email(from_emails)
-            if not from_email:
-                self.log("No from emails available", 'error')
-                break
-            
-            # Get next SMTP (round-robin across recipients)
-            smtp_server = self.get_next_smtp(smtp_servers)
-            if not smtp_server:
-                self.log("No active SMTP servers available", 'error')
-                break
-            
-            # Send email
-            self.send_email(recipient, from_email, smtp_server, html_content, subject, sender_name)
+        # Keep sending until all from emails are used
+        while len(self.used_from_emails) < len(from_emails) and self.running:
+            for recipient in recipients:
+                if not self.running:
+                    self.log("Campaign stopped by user", 'warning')
+                    break
+                
+                # Check if all from emails have been used
+                if len(self.used_from_emails) >= len(from_emails):
+                    self.log("All from emails have been used", 'success')
+                    break
+                
+                # Get next from email (round-robin across all from emails)
+                from_email = self.get_next_from_email(from_emails)
+                if not from_email:
+                    self.log("No from emails available", 'error')
+                    break
+                
+                # Get next SMTP (round-robin across recipients)
+                smtp_server = self.get_next_smtp(smtp_servers)
+                if not smtp_server:
+                    self.log("No active SMTP servers available", 'error')
+                    break
+                
+                # Send email
+                self.send_email(recipient, from_email, smtp_server, html_content, subject, sender_name)
         
         # Remove used from emails from file
         if self.from_file_path and self.used_from_emails:
