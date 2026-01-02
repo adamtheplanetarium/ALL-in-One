@@ -388,29 +388,34 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(checkSendingStatus, 5000); // Every 5 seconds
 });
 
-// Socket.IO listener for new monitored emails
-socket.on('new_monitored_email', function(data) {
-    addToSendingConsole(`[NEW EMAIL] ${data.from} received in ${data.account}`, 'info');
-    showNotification('New Email Monitored', `From: ${data.from}`);
-    loadMonitoredFroms(); // Refresh data
-});
+// Socket.IO listeners (check if socket is available from base.html)
+if (typeof socket !== 'undefined') {
+    // Socket.IO listener for new monitored emails
+    socket.on('new_monitored_email', function(data) {
+        addToSendingConsole(`[NEW EMAIL] ${data.from} received in ${data.account}`, 'info');
+        showNotification('New Email Monitored', `From: ${data.from}`);
+        loadMonitoredFroms(); // Refresh data
+    });
 
-// Socket.IO listener for sending campaign logs
-socket.on('sending_campaign_log', function(data) {
-    addToSendingConsole(data.message, data.type || 'info');
-});
+    // Socket.IO listener for sending campaign logs
+    socket.on('sending_campaign_log', function(data) {
+        addToSendingConsole(data.message, data.log_type || 'info');
+    });
 
-// Socket.IO listener for sending campaign stats
-socket.on('sending_campaign_stats', function(data) {
-    updateSendingStats(data);
-});
+    // Socket.IO listener for sending campaign stats
+    socket.on('sending_campaign_stats', function(data) {
+        updateSendingStats(data);
+    });
 
-// Socket.IO listener for sending campaign complete
-socket.on('sending_campaign_complete', function(data) {
-    addToSendingConsole(data.message, 'success');
-    sendingCampaignRunning = false;
-    updateSendingButtons();
-});
+    // Socket.IO listener for sending campaign complete
+    socket.on('sending_campaign_complete', function(data) {
+        addToSendingConsole(data.message, 'success');
+        sendingCampaignRunning = false;
+        updateSendingButtons();
+    });
+} else {
+    console.warn('Socket.IO not available - real-time updates disabled');
+}
 
 function loadMonitoredFroms() {
     fetch('/api/monitored/froms')
