@@ -32,18 +32,8 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'email_management' %}active{% endif %}" href="{{ url_for('email_management') }}">
-                            <i class="bi bi-people-fill"></i> Email Lists
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'template_editor' %}active{% endif %}" href="{{ url_for('template_editor') }}">
-                            <i class="bi bi-file-earmark-text"></i> Template
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'campaign_settings' %}active{% endif %}" href="{{ url_for('campaign_settings') }}">
-                            <i class="bi bi-gear-fill"></i> Campaign
+                            <i class="bi bi-check-circle-fill"></i> Check Froms
                         </a>
                     </li>
                     <li class="nav-item">
