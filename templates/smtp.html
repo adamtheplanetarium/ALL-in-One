@@ -204,26 +204,39 @@ danish.ismail@isianpadu.com:B89e9pmX!GxQMnBo:mail.isianpadu.com:587"></textarea>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-const socket = io();
+let socket;
 let servers = [];
 let currentFilter = 'all';
 
-socket.on('validation_log', function(data) {
-    addValidationLog(data.message);
-});
+// Initialize Socket.IO when available
+function initSocket() {
+    if (typeof io !== 'undefined') {
+        socket = io();
+        
+        socket.on('validation_log', function(data) {
+            addValidationLog(data.message);
+        });
 
-socket.on('validation_stats', function(stats) {
-    updateValidationStats(stats);
-});
+        socket.on('validation_stats', function(stats) {
+            updateValidationStats(stats);
+        });
 
-socket.on('validation_complete', function(data) {
-    addValidationLog('✅ Validation completed!');
-    setTimeout(() => {
-        loadServers();
-    }, 2000);
-});
+        socket.on('validation_complete', function(data) {
+            addValidationLog('✅ Validation completed!');
+            setTimeout(() => {
+                loadServers();
+            }, 2000);
+        });
+    } else {
+        setTimeout(initSocket, 100); // Retry after 100ms
+    }
+}
+
+initSocket();
 
 function loadServers() {
     fetch('/api/smtp/list')
