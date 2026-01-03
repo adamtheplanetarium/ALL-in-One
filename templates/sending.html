@@ -528,13 +528,22 @@ copermerv2026@yahoo.com</textarea>
             <div class="modal-body">
                 <!-- Phase 1: Sending -->
                 <div id="recheckPhase1" class="mb-4">
-                    <h6 class="text-primary"><i class="bi bi-send-fill"></i> Phase 1: Sending Test Emails</h6>
-                    <div class="progress" style="height: 25px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
-                             id="recheckSendingProgress" 
-                             role="progressbar" 
-                             style="width: 0%">
-                            <span id="recheckSendingText">0/0 (0%)</span>
+                    <div class="row">
+                        <div class="col-md-9">
+                            <h6 class="text-primary"><i class="bi bi-send-fill"></i> Phase 1: Sending Test Emails</h6>
+                            <div class="progress" style="height: 25px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                     id="recheckSendingProgress" 
+                                     role="progressbar" 
+                                     style="width: 0%">
+                                    <span id="recheckSendingText">0/0 (0%)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <h6 class="text-muted">Next Batch In</h6>
+                            <div class="display-4 text-primary fw-bold" id="recheckBatchCountdown">5</div>
+                            <small class="text-muted">seconds</small>
                         </div>
                     </div>
                 </div>
@@ -583,11 +592,19 @@ copermerv2026@yahoo.com</textarea>
                 </div>
                 
                 <!-- Activity Log -->
-                <div>
-                    <h6><i class="bi bi-list-ul"></i> Latest Activity</h6>
-                    <div id="recheckActivityLog" 
-                         style="height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 12px;">
-                        <div class="text-muted">Initializing...</div>
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6><i class="bi bi-list-ul"></i> Latest Activity</h6>
+                        <div id="recheckActivityLog" 
+                             style="height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 12px;">
+                            <div class="text-muted">Initializing...</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <h6><i class="bi bi-check-circle-fill text-success"></i> Working Froms</h6>
+                        <textarea id="recheckWorkingLog" readonly
+                                  style="height: 200px; width: 100%; background: #d1f2dd; padding: 10px; border: 1px solid #28a745; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 11px; resize: none;"
+                                  placeholder="Working from emails will appear here..."></textarea>
                     </div>
                 </div>
             </div>
@@ -1451,7 +1468,11 @@ function copyToClipboard(text) {
 let recheckProgressModal;
 let recheckResultsModal;
 let recheckCountdownInterval;
+let recheckBatchCountdownInterval;
+let recheckBatchCounter = 5;
+let recheckFirstCycle = true;
 let recheckResults = { working: [], failed: [], pending: [] };
+let recheckWorkingEmails = new Set(); // Track working emails
 
 // Save recheck configuration
 function saveRecheckConfig() {
@@ -1538,6 +1559,16 @@ function startRecheckCampaign() {
             // Reset UI
             document.getElementById('recheckSendingProgress').style.width = '0%';
             document.getElementById('recheckSendingText').textContent = '0/0 (0%)';
+            document.getElementById('recheckWorkingCount').textContent = '0';
+            document.getElementById('recheckPendingCount').textContent = '0';
+            document.getElementById('recheckFailedCount').textContent = '0';
+            document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
+            document.getElementById('recheckWorkingLog').value = ''; // Clear working log
+            recheckWorkingEmails.clear(); // Clear working set
+            
+            // Start batch countdown
+            startBatchCountdown();
+            document.getElementById('recheckSendingText').textContent = '0/0 (0%)';
             document.getElementById('recheckPhase2').style.display = 'none';
             document.getElementById('recheckWorkingCount').textContent = '0';
             document.getElementById('recheckPendingCount').textContent = '0';
@@ -1560,6 +1591,8 @@ function startRecheckCampaign() {
 
 // Stop recheck campaign
 function stopRecheckCampaign() {
+    if (!confirm('Stop the campaign and view results?')) return;
+    
     fetch('/api/recheck/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -1567,15 +1600,43 @@ function stopRecheckCampaign() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            addRecheckActivity('Campaign stopped by user', 'warning');
+            addRecheckActivity('⛔ Campaign stopped by user', 'warning');
             if (recheckCountdownInterval) {
                 clearInterval(recheckCountdownInterval);
+            }
+            if (recheckBatchCountdownInterval) {
+                clearInterval(recheckBatchCountdownInterval);
             }
             document.getElementById('stopRecheckBtn').style.display = 'none';
             document.getElementById('viewResultsBtn').style.display = 'inline-block';
             document.getElementById('closeRecheckModal').style.display = 'inline-block';
+            
+            // Prompt to swap results
+            promptSwapResults();
         }
     });
+}
+
+// Start batch countdown (5→1, then 8→1, cycling)
+function startBatchCountdown() {
+    recheckBatchCounter = recheckFirstCycle ? 5 : 8;
+    document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
+    
+    if (recheckBatchCountdownInterval) {
+        clearInterval(recheckBatchCountdownInterval);
+    }
+    
+    recheckBatchCountdownInterval = setInterval(() => {
+        recheckBatchCounter--;
+        document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
+        
+        if (recheckBatchCounter <= 0) {
+            // Reset counter
+            recheckFirstCycle = false;
+            recheckBatchCounter = 8;
+            document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
+        }
+    }, 1000);
 }
 
 // Start 5-minute countdown
@@ -1878,6 +1939,12 @@ if (typeof socket !== 'undefined') {
     
     socket.on('recheck_sending_complete', function(data) {
         addRecheckActivity('✅ All test emails sent! Starting 5-minute countdown...', 'success');
+        
+        // Stop batch countdown
+        if (recheckBatchCountdownInterval) {
+            clearInterval(recheckBatchCountdownInterval);
+        }
+        
         startRecheckCountdown();
     });
     
@@ -1889,6 +1956,14 @@ if (typeof socket !== 'undefined') {
         
         // Add to activity
         addRecheckActivity(`✅ Response detected from: ${data.from_email}`, 'success');
+        
+        // Add to working log (prevent duplicates)
+        if (!recheckWorkingEmails.has(data.from_email)) {
+            recheckWorkingEmails.add(data.from_email);
+            const workingLog = document.getElementById('recheckWorkingLog');
+            workingLog.value += data.from_email + '\n';
+            workingLog.scrollTop = workingLog.scrollHeight; // Auto-scroll to bottom
+        }
     });
 }
 
