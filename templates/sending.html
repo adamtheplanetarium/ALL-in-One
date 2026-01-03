@@ -84,6 +84,11 @@
                     <i class="bi bi-terminal"></i> Console
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="recheck-froms-tab" data-bs-toggle="tab" data-bs-target="#recheck-froms" type="button">
+                    <i class="bi bi-arrow-repeat"></i> Recheck Froms
+                </button>
+            </li>
         </ul>
         
         <div class="tab-content" id="sendingTabContent">
@@ -291,6 +296,126 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Recheck Froms Tab -->
+            <div class="tab-pane fade" id="recheck-froms" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="mb-4"><i class="bi bi-arrow-repeat"></i> Recheck From Addresses</h5>
+                        <p class="text-muted">Test which from addresses are working by sending verification emails</p>
+                        
+                        <div id="recheckAlertContainer"></div>
+                        
+                        <!-- Configuration Form -->
+                        <div class="row mb-4">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label"><strong>From Source to Test</strong></label>
+                                <select class="form-control" id="recheckFromSource">
+                                    <option value="active">Active Froms Only</option>
+                                    <option value="inactive">Inactive Froms Only</option>
+                                    <option value="all">Both (Active + Inactive)</option>
+                                </select>
+                                <small class="text-muted">Select which from addresses to test</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label"><strong>Sender Name</strong></label>
+                                <input type="text" class="form-control" id="recheckSenderName" value="Verification System" placeholder="Verification System">
+                                <small class="text-muted">Name shown in "From" field</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label"><strong>Subject Template</strong></label>
+                                <input type="text" class="form-control" id="recheckSubject" value="Verification {unique_id}" placeholder="Verification {unique_id}">
+                                <small class="text-muted">Variables: <code>{unique_id}</code>, <code>{from_email}</code>, <code>{timestamp}</code></small>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label"><strong>Test Recipients (One per line)</strong></label>
+                                <textarea class="form-control" id="recheckRecipients" rows="6" placeholder="Enter test email addresses">Footmen203@yahoo.com
+Footmen404@yahoo.com
+azoofoo2026@yahoo.com
+azoofozora2026@yahoo.com
+brb4mints@yahoo.com
+atombrid2069@yahoo.com
+micoland2026@yahoo.com
+bravoeco2026@yahoo.com
+laststand2026@yahoo.com
+copermerv2026@yahoo.com</textarea>
+                                <small class="text-muted">Test emails will be sent to these addresses</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-4">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label"><strong>HTML Message Template</strong></label>
+                                <textarea class="form-control" id="recheckMessage" rows="10" placeholder="HTML message" style="font-family: 'Courier New', monospace;"><!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+        <h1 style="margin: 0; font-size: 28px;">✉️ Email Verification</h1>
+    </div>
+    
+    <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #667eea; margin-top: 0;">Verification Test</h2>
+        
+        <p style="font-size: 16px;">This is an automated verification email from:</p>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #667eea; margin: 20px 0;">
+            <strong style="color: #667eea;">From:</strong> {from_email}
+        </div>
+        
+        <table style="width: 100%; margin: 20px 0; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;"><strong>Test ID:</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #e0e0e0; font-family: monospace;">{unique_id}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;"><strong>Timestamp:</strong></td>
+                <td style="padding: 10px; border-bottom: 1px solid #e0e0e0;">{timestamp}</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><strong>Recipient:</strong></td>
+                <td style="padding: 10px;">{recipient}</td>
+            </tr>
+        </table>
+        
+        <p style="color: #666; font-size: 14px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+            <em>This is an automated test email from the verification system. If this email reached your inbox, the sender address is working correctly.</em>
+        </p>
+    </div>
+    
+    <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+        <p>Automated Email Verification System</p>
+    </div>
+</body>
+</html></textarea>
+                                <small class="text-muted">HTML template with variables: <code>{from_email}</code>, <code>{unique_id}</code>, <code>{timestamp}</code>, <code>{recipient}</code></small>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button class="btn btn-primary" onclick="saveRecheckConfig()">
+                                    <i class="bi bi-save"></i> Save Configuration
+                                </button>
+                            </div>
+                            <div>
+                                <button class="btn btn-success btn-lg" onclick="startRecheckCampaign()" id="startRecheckBtn">
+                                    <i class="bi bi-play-circle-fill"></i> Start Recheck Campaign
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -365,6 +490,205 @@
         </div>
     </div>
 </div>
+
+<!-- Recheck Progress Modal -->
+<div class="modal fade" id="recheckProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-arrow-repeat spin-animation"></i> Recheck Campaign Running
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" id="closeRecheckModal" style="display: none;"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Phase 1: Sending -->
+                <div id="recheckPhase1" class="mb-4">
+                    <h6 class="text-primary"><i class="bi bi-send-fill"></i> Phase 1: Sending Test Emails</h6>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                             id="recheckSendingProgress" 
+                             role="progressbar" 
+                             style="width: 0%">
+                            <span id="recheckSendingText">0/0 (0%)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Phase 2: Waiting -->
+                <div id="recheckPhase2" class="mb-4" style="display: none;">
+                    <h6 class="text-success"><i class="bi bi-hourglass-split"></i> Phase 2: Waiting for Responses</h6>
+                    <div class="alert alert-success">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-clock-fill"></i> <strong>Time Remaining:</strong>
+                            </div>
+                            <div>
+                                <span class="fs-4" id="recheckCountdown">5:00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white text-center">
+                            <div class="card-body py-2">
+                                <h3 class="mb-0" id="recheckWorkingCount">0</h3>
+                                <small>✅ Working</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-warning text-white text-center">
+                            <div class="card-body py-2">
+                                <h3 class="mb-0" id="recheckPendingCount">0</h3>
+                                <small>⏳ Pending</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-danger text-white text-center">
+                            <div class="card-body py-2">
+                                <h3 class="mb-0" id="recheckFailedCount">0</h3>
+                                <small>❌ Failed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Activity Log -->
+                <div>
+                    <h6><i class="bi bi-list-ul"></i> Latest Activity</h6>
+                    <div id="recheckActivityLog" 
+                         style="height: 200px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 12px;">
+                        <div class="text-muted">Initializing...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="stopRecheckCampaign()" id="stopRecheckBtn">
+                    <i class="bi bi-stop-circle-fill"></i> Stop Campaign
+                </button>
+                <button type="button" class="btn btn-primary" onclick="viewRecheckResults()" id="viewResultsBtn" style="display: none;">
+                    <i class="bi bi-eye-fill"></i> View Full Results
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recheck Results Modal -->
+<div class="modal fade" id="recheckResultsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle-fill"></i> Recheck Results
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <strong>Campaign Summary:</strong> 
+                            <span id="resultsSummaryText"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <ul class="nav nav-tabs mb-3" id="resultsTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="working-tab" data-bs-toggle="tab" data-bs-target="#working-results" type="button">
+                            <i class="bi bi-check-circle-fill text-success"></i> Working (<span id="workingTabCount">0</span>)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="failed-tab" data-bs-toggle="tab" data-bs-target="#failed-results" type="button">
+                            <i class="bi bi-x-circle-fill text-danger"></i> Failed (<span id="failedTabCount">0</span>)
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="working-results" role="tabpanel">
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-success sticky-top">
+                                    <tr>
+                                        <th width="50">
+                                            <input type="checkbox" id="selectAllWorking" onchange="toggleSelectAllWorking()">
+                                        </th>
+                                        <th>From Email</th>
+                                        <th>Sent At</th>
+                                        <th>Delivered At</th>
+                                        <th>Response Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="workingResultsTable">
+                                    <tr><td colspan="5" class="text-center text-muted">No working froms yet...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="failed-results" role="tabpanel">
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-danger sticky-top">
+                                    <tr>
+                                        <th width="50">
+                                            <input type="checkbox" id="selectAllFailed" onchange="toggleSelectAllFailed()">
+                                        </th>
+                                        <th>From Email</th>
+                                        <th>Sent At</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="failedResultsTable">
+                                    <tr><td colspan="4" class="text-center text-muted">No failed froms yet...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="me-auto">
+                    <button class="btn btn-success" onclick="moveWorkingToActive()">
+                        <i class="bi bi-arrow-right-circle-fill"></i> Move Working to Active
+                    </button>
+                    <button class="btn btn-secondary" onclick="moveFailedToInactive()">
+                        <i class="bi bi-arrow-left-circle-fill"></i> Move Failed to Inactive
+                    </button>
+                    <button class="btn btn-primary" onclick="swapActiveInactive()">
+                        <i class="bi bi-arrow-left-right"></i> Swap Active ↔ Inactive
+                    </button>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.spin-animation {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+</style>
 
 {% endblock %}
 
@@ -925,5 +1249,391 @@ function bulkToggleStatus(emails, newStatus) {
         showSendingAlert('danger', 'Error moving emails');
     });
 }
+
+// ========================================
+// RECHECK FROMS FUNCTIONS
+// ========================================
+
+let recheckProgressModal;
+let recheckResultsModal;
+let recheckCountdownInterval;
+let recheckResults = { working: [], failed: [], pending: [] };
+
+// Save recheck configuration
+function saveRecheckConfig() {
+    const config = {
+        from_source: document.getElementById('recheckFromSource').value,
+        sender_name: document.getElementById('recheckSenderName').value,
+        subject: document.getElementById('recheckSubject').value,
+        recipients: document.getElementById('recheckRecipients').value.split('\n').filter(r => r.trim()),
+        message: document.getElementById('recheckMessage').value
+    };
+    
+    fetch('/api/recheck/save_config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('recheckAlertContainer', 'Configuration saved successfully!', 'success');
+        } else {
+            showAlert('recheckAlertContainer', data.message || 'Failed to save configuration', 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('recheckAlertContainer', 'Error saving configuration', 'danger');
+    });
+}
+
+// Start recheck campaign
+function startRecheckCampaign() {
+    // Save config first
+    const config = {
+        from_source: document.getElementById('recheckFromSource').value,
+        sender_name: document.getElementById('recheckSenderName').value,
+        subject: document.getElementById('recheckSubject').value,
+        recipients: document.getElementById('recheckRecipients').value.split('\n').filter(r => r.trim()),
+        message: document.getElementById('recheckMessage').value
+    };
+    
+    // Validate
+    if (config.recipients.length === 0) {
+        showAlert('recheckAlertContainer', 'Please add test recipients', 'warning');
+        return;
+    }
+    
+    // Save and start
+    fetch('/api/recheck/save_config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Now start campaign
+            return fetch('/api/recheck/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } else {
+            throw new Error(data.message || 'Failed to save config');
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            // Show progress modal
+            recheckProgressModal = new bootstrap.Modal(document.getElementById('recheckProgressModal'));
+            recheckProgressModal.show();
+            
+            // Reset UI
+            document.getElementById('recheckSendingProgress').style.width = '0%';
+            document.getElementById('recheckSendingText').textContent = '0/0 (0%)';
+            document.getElementById('recheckPhase2').style.display = 'none';
+            document.getElementById('recheckWorkingCount').textContent = '0';
+            document.getElementById('recheckPendingCount').textContent = '0';
+            document.getElementById('recheckFailedCount').textContent = '0';
+            document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
+            document.getElementById('stopRecheckBtn').style.display = 'inline-block';
+            document.getElementById('viewResultsBtn').style.display = 'none';
+            document.getElementById('closeRecheckModal').style.display = 'none';
+            
+            recheckResults = { working: [], failed: [], pending: [] };
+        } else {
+            showAlert('recheckAlertContainer', data.message || 'Failed to start campaign', 'danger');
+        }
+    })
+    .catch(err => {
+        showAlert('recheckAlertContainer', err.message || 'Error starting campaign', 'danger');
+    });
+}
+
+// Stop recheck campaign
+function stopRecheckCampaign() {
+    fetch('/api/recheck/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            addRecheckActivity('Campaign stopped by user', 'warning');
+            if (recheckCountdownInterval) {
+                clearInterval(recheckCountdownInterval);
+            }
+            document.getElementById('stopRecheckBtn').style.display = 'none';
+            document.getElementById('viewResultsBtn').style.display = 'inline-block';
+            document.getElementById('closeRecheckModal').style.display = 'inline-block';
+        }
+    });
+}
+
+// Start 5-minute countdown
+function startRecheckCountdown() {
+    let timeLeft = 300; // 5 minutes in seconds
+    
+    document.getElementById('recheckPhase1').style.display = 'none';
+    document.getElementById('recheckPhase2').style.display = 'block';
+    
+    recheckCountdownInterval = setInterval(() => {
+        timeLeft--;
+        
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        document.getElementById('recheckCountdown').textContent = 
+            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        if (timeLeft <= 0) {
+            clearInterval(recheckCountdownInterval);
+            document.getElementById('recheckCountdown').textContent = '0:00';
+            addRecheckActivity('⏱️ Time limit reached - Campaign complete', 'info');
+            document.getElementById('stopRecheckBtn').style.display = 'none';
+            document.getElementById('viewResultsBtn').style.display = 'inline-block';
+            document.getElementById('closeRecheckModal').style.display = 'inline-block';
+        }
+    }, 1000);
+}
+
+// Add activity to log
+function addRecheckActivity(message, type = 'info') {
+    const log = document.getElementById('recheckActivityLog');
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString();
+    
+    const icons = {
+        'info': 'ℹ️',
+        'success': '✅',
+        'warning': '⚠️',
+        'error': '❌'
+    };
+    
+    const entry = document.createElement('div');
+    entry.className = `text-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'secondary'}`;
+    entry.textContent = `[${timestamp}] ${icons[type]} ${message}`;
+    
+    log.insertBefore(entry, log.firstChild);
+    
+    // Keep only last 50 entries
+    while (log.children.length > 50) {
+        log.removeChild(log.lastChild);
+    }
+}
+
+// View full results
+function viewRecheckResults() {
+    // Hide progress modal
+    if (recheckProgressModal) {
+        recheckProgressModal.hide();
+    }
+    
+    // Load results
+    fetch('/api/recheck/results')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                recheckResults = data.results;
+                renderRecheckResults();
+                
+                // Show results modal
+                recheckResultsModal = new bootstrap.Modal(document.getElementById('recheckResultsModal'));
+                recheckResultsModal.show();
+            }
+        });
+}
+
+// Render results tables
+function renderRecheckResults() {
+    const working = recheckResults.working || [];
+    const failed = recheckResults.failed || [];
+    
+    // Update counts
+    document.getElementById('workingTabCount').textContent = working.length;
+    document.getElementById('failedTabCount').textContent = failed.length;
+    
+    const total = working.length + failed.length;
+    document.getElementById('resultsSummaryText').textContent = 
+        `Tested ${total} from addresses: ${working.length} working, ${failed.length} failed`;
+    
+    // Working table
+    const workingTable = document.getElementById('workingResultsTable');
+    if (working.length === 0) {
+        workingTable.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No working froms detected</td></tr>';
+    } else {
+        workingTable.innerHTML = working.map(from => {
+            const responseTime = from.delivered_at && from.sent_at ? 
+                Math.round((new Date(from.delivered_at) - new Date(from.sent_at)) / 1000) : 'N/A';
+            return `
+                <tr>
+                    <td><input type="checkbox" class="working-checkbox" value="${from.email}"></td>
+                    <td>${from.email}</td>
+                    <td>${new Date(from.sent_at).toLocaleString()}</td>
+                    <td>${from.delivered_at ? new Date(from.delivered_at).toLocaleString() : 'N/A'}</td>
+                    <td>${responseTime !== 'N/A' ? responseTime + 's' : 'N/A'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    // Failed table
+    const failedTable = document.getElementById('failedResultsTable');
+    if (failed.length === 0) {
+        failedTable.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No failed froms</td></tr>';
+    } else {
+        failedTable.innerHTML = failed.map(from => `
+            <tr>
+                <td><input type="checkbox" class="failed-checkbox" value="${from.email}"></td>
+                <td>${from.email}</td>
+                <td>${new Date(from.sent_at).toLocaleString()}</td>
+                <td><span class="badge bg-danger">No Response</span></td>
+            </tr>
+        `).join('');
+    }
+}
+
+// Toggle select all working
+function toggleSelectAllWorking() {
+    const checked = document.getElementById('selectAllWorking').checked;
+    document.querySelectorAll('.working-checkbox').forEach(cb => cb.checked = checked);
+}
+
+// Toggle select all failed
+function toggleSelectAllFailed() {
+    const checked = document.getElementById('selectAllFailed').checked;
+    document.querySelectorAll('.failed-checkbox').forEach(cb => cb.checked = checked);
+}
+
+// Move working to active
+function moveWorkingToActive() {
+    const working = recheckResults.working || [];
+    const emails = working.map(f => f.email);
+    
+    if (emails.length === 0) {
+        alert('No working from addresses to move');
+        return;
+    }
+    
+    if (!confirm(`Move ${emails.length} working from addresses to Active?`)) {
+        return;
+    }
+    
+    applyBulkStatusChange(emails, 'active');
+}
+
+// Move failed to inactive
+function moveFailedToInactive() {
+    const failed = recheckResults.failed || [];
+    const emails = failed.map(f => f.email);
+    
+    if (emails.length === 0) {
+        alert('No failed from addresses to move');
+        return;
+    }
+    
+    if (!confirm(`Move ${emails.length} failed from addresses to Inactive?`)) {
+        return;
+    }
+    
+    applyBulkStatusChange(emails, 'inactive');
+}
+
+// Swap active and inactive
+function swapActiveInactive() {
+    const working = recheckResults.working || [];
+    const failed = recheckResults.failed || [];
+    
+    if (working.length === 0 && failed.length === 0) {
+        alert('No results to process');
+        return;
+    }
+    
+    if (!confirm(`Move ${working.length} working to Active and ${failed.length} failed to Inactive?`)) {
+        return;
+    }
+    
+    fetch('/api/recheck/apply_results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'swap' })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Updated statuses: ${data.active_count} moved to Active, ${data.inactive_count} moved to Inactive`);
+            loadMonitoredFroms(); // Refresh the from lists
+            if (recheckResultsModal) {
+                recheckResultsModal.hide();
+            }
+        } else {
+            alert(data.message || 'Failed to update statuses');
+        }
+    })
+    .catch(err => {
+        alert('Error updating statuses');
+    });
+}
+
+// Apply bulk status change
+function applyBulkStatusChange(emails, status) {
+    fetch('/api/recheck/apply_results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'bulk',
+            emails: emails,
+            status: status
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Updated ${data.count} from addresses to ${status}`);
+            loadMonitoredFroms(); // Refresh the from lists
+            if (recheckResultsModal) {
+                recheckResultsModal.hide();
+            }
+        } else {
+            alert(data.message || 'Failed to update statuses');
+        }
+    })
+    .catch(err => {
+        alert('Error updating statuses');
+    });
+}
+
+// Socket.IO listeners for recheck events
+if (typeof socket !== 'undefined') {
+    socket.on('recheck_progress', function(data) {
+        // Update progress bar
+        const percent = (data.sent / data.total * 100).toFixed(0);
+        document.getElementById('recheckSendingProgress').style.width = percent + '%';
+        document.getElementById('recheckSendingText').textContent = `${data.sent}/${data.total} (${percent}%)`;
+        
+        // Update pending count
+        document.getElementById('recheckPendingCount').textContent = data.total - data.sent;
+    });
+    
+    socket.on('recheck_log', function(data) {
+        addRecheckActivity(data.message, data.log_type || 'info');
+    });
+    
+    socket.on('recheck_sending_complete', function(data) {
+        addRecheckActivity('✅ All test emails sent! Starting 5-minute countdown...', 'success');
+        startRecheckCountdown();
+    });
+    
+    socket.on('recheck_response_detected', function(data) {
+        // Update stats
+        document.getElementById('recheckWorkingCount').textContent = data.working_count;
+        document.getElementById('recheckPendingCount').textContent = data.pending_count;
+        document.getElementById('recheckFailedCount').textContent = data.failed_count;
+        
+        // Add to activity
+        addRecheckActivity(`✅ Response detected from: ${data.from_email}`, 'success');
+    });
+}
+
 </script>
 {% endblock %}

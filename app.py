@@ -860,6 +860,45 @@ def new_email():
         
         print(f"📧 New email received: {account_name} - {from_email} - {data.get('subject')}")
         
+        # Check if this is a recheck response
+        subject = data.get('subject', '')
+        if 'RECHECK_' in subject and recheck_campaign_running:
+            # Extract unique_id
+            try:
+                campaign_data = load_recheck_active()
+                if campaign_data:
+                    froms_tested = campaign_data.get('froms_tested', {})
+                    
+                    # Find matching from email by unique_id in subject
+                    for test_email, test_data in froms_tested.items():
+                        unique_id = test_data.get('unique_id', '')
+                        if unique_id and unique_id in subject:
+                            # Mark as working
+                            test_data['status'] = 'working'
+                            test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            campaign_data['froms_tested'][test_email] = test_data
+                            save_recheck_active(campaign_data)
+                            
+                            # Count stats
+                            working = sum(1 for d in froms_tested.values() if d.get('status') == 'working')
+                            failed = sum(1 for d in froms_tested.values() if d.get('status') == 'failed')
+                            pending = sum(1 for d in froms_tested.values() if d.get('status') == 'pending')
+                            
+                            # Emit Socket.IO event
+                            if recheck_campaign_callback:
+                                recheck_campaign_callback({
+                                    'type': 'recheck_response_detected',
+                                    'from_email': test_email,
+                                    'working_count': working,
+                                    'pending_count': pending,
+                                    'failed_count': failed
+                                })
+                            
+                            print(f"✅ Recheck response detected for: {test_email}")
+                            break
+            except Exception as e:
+                print(f"Error processing recheck response: {e}")
+        
         # Emit to connected clients via SocketIO
         socketio.emit('new_monitored_email', {
             'account': account_name,
@@ -1147,6 +1186,425 @@ def stop_sending_campaign():
 def get_sending_status():
     """Get sending campaign status"""
     return jsonify({'running': sending_campaign_running})
+
+# Recheck Froms Campaign API endpoints
+recheck_config_file = os.path.join('Basic', 'recheck_config.json')
+recheck_active_file = os.path.join('Basic', 'recheck_active.json')
+recheck_campaign_running = False
+recheck_campaign_thread = None
+recheck_campaign_callback = None
+
+def load_recheck_config():
+    """Load recheck configuration"""
+    try:
+        if os.path.exists(recheck_config_file):
+            with open(recheck_config_file, 'r') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"Error loading recheck config: {e}")
+        return {}
+
+def save_recheck_config(config):
+    """Save recheck configuration"""
+    try:
+        with open(recheck_config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving recheck config: {e}")
+        return False
+
+def load_recheck_active():
+    """Load active recheck campaign data"""
+    try:
+        if os.path.exists(recheck_active_file):
+            with open(recheck_active_file, 'r') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"Error loading recheck active: {e}")
+        return {}
+
+def save_recheck_active(data):
+    """Save active recheck campaign data"""
+    try:
+        with open(recheck_active_file, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving recheck active: {e}")
+        return False
+
+@app.route('/api/recheck/save_config', methods=['POST'])
+@login_required
+def save_recheck_configuration():
+    """Save recheck configuration"""
+    try:
+        config = request.json
+        if save_recheck_config(config):
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recheck/start', methods=['POST'])
+@login_required
+def start_recheck_campaign():
+    """Start recheck campaign"""
+    global recheck_campaign_running, recheck_campaign_thread, recheck_campaign_callback
+    
+    try:
+        if recheck_campaign_running:
+            return jsonify({'success': False, 'message': 'Recheck campaign already running'})
+        
+        # Load config
+        config = load_recheck_config()
+        if not config:
+            return jsonify({'success': False, 'message': 'No configuration found. Please save configuration first.'}), 400
+        
+        # Validate recipients
+        recipients = config.get('recipients', [])
+        if not recipients:
+            return jsonify({'success': False, 'message': 'No test recipients configured'}), 400
+        
+        # Get from emails based on source
+        from_source = config.get('from_source', 'active')
+        with monitored_lock:
+            all_from_emails = []
+            for account_data in monitored_data['accounts'].values():
+                all_from_emails.extend(account_data['from_emails'])
+        
+        # Filter based on from_source
+        filtered_from_emails = []
+        for from_email in all_from_emails:
+            status = get_from_status(from_email)
+            if from_source == 'active' and status == 'active':
+                filtered_from_emails.append(from_email)
+            elif from_source == 'inactive' and status == 'inactive':
+                filtered_from_emails.append(from_email)
+            elif from_source == 'all':
+                filtered_from_emails.append(from_email)
+        
+        if not filtered_from_emails:
+            return jsonify({'success': False, 'message': f'No {from_source} from emails available'}), 400
+        
+        # Define callback for Socket.IO events
+        def campaign_callback(event):
+            try:
+                event_type = event.get('type')
+                if event_type == 'recheck_progress':
+                    socketio.emit('recheck_progress', {
+                        'sent': event['sent'],
+                        'total': event['total']
+                    })
+                elif event_type == 'recheck_log':
+                    socketio.emit('recheck_log', {
+                        'message': event['message'],
+                        'log_type': event.get('log_type', 'info')
+                    })
+                elif event_type == 'recheck_sending_complete':
+                    socketio.emit('recheck_sending_complete', {})
+                elif event_type == 'recheck_response_detected':
+                    socketio.emit('recheck_response_detected', {
+                        'from_email': event['from_email'],
+                        'working_count': event['working_count'],
+                        'pending_count': event['pending_count'],
+                        'failed_count': event['failed_count']
+                    })
+            except Exception as e:
+                print(f"[RECHECK CALLBACK ERROR] {e}")
+        
+        # Store callback
+        recheck_campaign_callback = campaign_callback
+        
+        # Initialize campaign data
+        import uuid
+        campaign_id = f"recheck_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        campaign_data = {
+            'campaign_id': campaign_id,
+            'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'from_source': from_source,
+            'froms_tested': {},
+            'config': config
+        }
+        
+        # Initialize all froms as pending
+        for from_email in filtered_from_emails:
+            campaign_data['froms_tested'][from_email] = {
+                'status': 'pending',
+                'unique_id': f"RECHECK_{uuid.uuid4().hex[:12]}",
+                'sent_at': None,
+                'delivered_at': None
+            }
+        
+        save_recheck_active(campaign_data)
+        
+        # Start campaign thread
+        recheck_campaign_running = True
+        recheck_campaign_thread = threading.Thread(target=run_recheck_campaign, daemon=False)
+        recheck_campaign_thread.start()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recheck/stop', methods=['POST'])
+@login_required
+def stop_recheck_campaign():
+    """Stop recheck campaign"""
+    global recheck_campaign_running
+    
+    try:
+        recheck_campaign_running = False
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recheck/status', methods=['GET'])
+@login_required
+def get_recheck_status():
+    """Get recheck campaign status"""
+    return jsonify({'running': recheck_campaign_running})
+
+@app.route('/api/recheck/results', methods=['GET'])
+@login_required
+def get_recheck_results():
+    """Get recheck campaign results"""
+    try:
+        campaign_data = load_recheck_active()
+        if not campaign_data:
+            return jsonify({'success': False, 'message': 'No active campaign'}), 404
+        
+        froms_tested = campaign_data.get('froms_tested', {})
+        
+        working = []
+        failed = []
+        pending = []
+        
+        for email, data in froms_tested.items():
+            from_data = {
+                'email': email,
+                'sent_at': data.get('sent_at'),
+                'delivered_at': data.get('delivered_at'),
+                'unique_id': data.get('unique_id')
+            }
+            
+            if data.get('status') == 'working':
+                working.append(from_data)
+            elif data.get('status') == 'failed':
+                failed.append(from_data)
+            else:
+                pending.append(from_data)
+        
+        return jsonify({
+            'success': True,
+            'results': {
+                'working': working,
+                'failed': failed,
+                'pending': pending
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/recheck/apply_results', methods=['POST'])
+@login_required
+def apply_recheck_results():
+    """Apply bulk status changes from recheck results"""
+    try:
+        data = request.json
+        action = data.get('action')
+        
+        campaign_data = load_recheck_active()
+        if not campaign_data:
+            return jsonify({'success': False, 'message': 'No active campaign'}), 404
+        
+        froms_tested = campaign_data.get('froms_tested', {})
+        
+        if action == 'swap':
+            # Move working to active, failed to inactive
+            active_count = 0
+            inactive_count = 0
+            
+            for email, from_data in froms_tested.items():
+                if from_data.get('status') == 'working':
+                    set_from_status(email, 'active')
+                    active_count += 1
+                elif from_data.get('status') == 'failed':
+                    set_from_status(email, 'inactive')
+                    inactive_count += 1
+            
+            return jsonify({
+                'success': True,
+                'active_count': active_count,
+                'inactive_count': inactive_count
+            })
+        
+        elif action == 'bulk':
+            # Bulk move specific emails
+            emails = data.get('emails', [])
+            status = data.get('status', 'active')
+            
+            count = 0
+            for email in emails:
+                if set_from_status(email, status):
+                    count += 1
+            
+            return jsonify({
+                'success': True,
+                'count': count
+            })
+        
+        return jsonify({'success': False, 'message': 'Invalid action'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+def run_recheck_campaign():
+    """Background thread for recheck campaign"""
+    global recheck_campaign_running, recheck_campaign_callback
+    
+    print(f"[RECHECK THREAD START] Callback available: {recheck_campaign_callback is not None}")
+    
+    def emit_log(message, log_type='info'):
+        """Helper to emit logs via callback"""
+        print(f"[RECHECK LOG] {message}")
+        if recheck_campaign_callback:
+            recheck_campaign_callback({
+                'type': 'recheck_log',
+                'message': message,
+                'log_type': log_type
+            })
+    
+    def emit_progress(sent, total):
+        """Helper to emit progress"""
+        if recheck_campaign_callback:
+            recheck_campaign_callback({
+                'type': 'recheck_progress',
+                'sent': sent,
+                'total': total
+            })
+    
+    try:
+        emit_log('🚀 Starting recheck campaign...', 'info')
+        
+        # Load campaign data
+        campaign_data = load_recheck_active()
+        if not campaign_data:
+            emit_log('❌ No campaign data found', 'error')
+            return
+        
+        config = campaign_data.get('config', {})
+        froms_tested = campaign_data.get('froms_tested', {})
+        recipients = config.get('recipients', [])
+        
+        emit_log(f'📋 Testing {len(froms_tested)} from addresses', 'info')
+        emit_log(f'📧 Sending to {len(recipients)} test recipients', 'info')
+        
+        # Load SMTP servers
+        smtp_file = os.path.join('Basic', 'smtp.txt')
+        smtp_servers = []
+        if os.path.exists(smtp_file):
+            with open(smtp_file, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 5 and parts[4] == 'active':
+                        smtp_servers.append({
+                            'host': parts[0],
+                            'port': parts[1],
+                            'username': parts[2],
+                            'password': parts[3]
+                        })
+        
+        if not smtp_servers:
+            emit_log('❌ No active SMTP servers available', 'error')
+            recheck_campaign_running = False
+            return
+        
+        emit_log(f'📮 Using {len(smtp_servers)} SMTP servers', 'info')
+        
+        # Send test emails
+        sent_count = 0
+        total_count = len(froms_tested)
+        smtp_index = 0
+        
+        for from_email, from_data in froms_tested.items():
+            if not recheck_campaign_running:
+                emit_log('⚠️ Campaign stopped by user', 'warning')
+                break
+            
+            unique_id = from_data['unique_id']
+            smtp_server = smtp_servers[smtp_index]
+            smtp_index = (smtp_index + 1) % len(smtp_servers)
+            
+            # Prepare message
+            subject = config.get('subject', 'Verification {unique_id}')
+            subject = subject.replace('{unique_id}', unique_id).replace('{from_email}', from_email).replace('{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            
+            message_body = config.get('message', '')
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Send to all test recipients
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
+                import email.utils
+                
+                for recipient in recipients:
+                    # Replace variables in message
+                    msg_html = message_body.replace('{from_email}', from_email)
+                    msg_html = msg_html.replace('{unique_id}', unique_id)
+                    msg_html = msg_html.replace('{timestamp}', timestamp)
+                    msg_html = msg_html.replace('{recipient}', recipient)
+                    
+                    msg = MIMEMultipart("alternative")
+                    sender_name = config.get('sender_name', 'Verification System')
+                    msg['From'] = f'{sender_name} <{from_email}>' if sender_name else from_email
+                    msg['To'] = recipient
+                    msg['Date'] = email.utils.formatdate(localtime=True)
+                    msg['Subject'] = subject
+                    msg["Message-ID"] = f"<{unique_id}@recheck.portal>"
+                    
+                    msg.attach(MIMEText(msg_html, 'html'))
+                    
+                    with smtplib.SMTP(smtp_server['host'], int(smtp_server['port']), timeout=30) as server:
+                        server.starttls()
+                        server.login(smtp_server['username'], smtp_server['password'])
+                        server.send_message(msg)
+                
+                # Update status
+                from_data['sent_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                campaign_data['froms_tested'][from_email] = from_data
+                save_recheck_active(campaign_data)
+                
+                sent_count += 1
+                emit_log(f'📤 Sent test from {from_email} ({sent_count}/{total_count})', 'info')
+                emit_progress(sent_count, total_count)
+                
+                time.sleep(1)  # 1 second delay
+                
+            except Exception as e:
+                emit_log(f'❌ Failed to send from {from_email}: {str(e)[:100]}', 'error')
+                sent_count += 1
+                emit_progress(sent_count, total_count)
+        
+        emit_log(f'✅ Sending complete! Sent {sent_count}/{total_count} test emails', 'success')
+        
+        if recheck_campaign_callback:
+            recheck_campaign_callback({'type': 'recheck_sending_complete'})
+        
+        # Wait 5 minutes for responses (monitored by countdown timer on frontend)
+        emit_log('⏱️ Starting 5-minute countdown for responses...', 'info')
+        
+        # Mark remaining as failed after campaign ends (will be updated by API responses)
+        
+    except Exception as e:
+        emit_log(f'💥 CRITICAL ERROR: {str(e)}', 'error')
+        import traceback
+        emit_log(f'📋 Traceback: {traceback.format_exc()[:500]}', 'error')
+    finally:
+        recheck_campaign_running = False
 
 def run_sending_campaign():
     """Background thread for sending campaign"""
