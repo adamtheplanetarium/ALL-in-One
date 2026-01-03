@@ -72,26 +72,49 @@ window.appUtils = {
     stopAutoRefresh
 };
 
-// Initialize Socket.IO connection
+// Initialize Socket.IO connection with optimized settings
 try {
     if (typeof io !== 'undefined') {
         window.socket = io({
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionAttempts: 5
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 10000,
+            reconnectionAttempts: Infinity,
+            timeout: 20000,
+            autoConnect: true,
+            forceNew: false,
+            multiplex: true,
+            upgrade: true,
+            rememberUpgrade: true
         });
         
         socket.on('connect', function() {
             console.log('✅ Socket.IO connected');
         });
         
-        socket.on('disconnect', function() {
-            console.log('⚠️ Socket.IO disconnected');
+        socket.on('disconnect', function(reason) {
+            if (reason === 'io server disconnect') {
+                // Server disconnected, reconnect manually
+                console.log('⚠️ Server disconnected - reconnecting...');
+                socket.connect();
+            } else {
+                console.log('⚠️ Socket.IO disconnected:', reason);
+            }
         });
         
         socket.on('connect_error', function(error) {
-            console.error('❌ Socket.IO connection error:', error);
+            console.error('❌ Socket.IO connection error:', error.message);
+        });
+        
+        socket.on('reconnect', function(attemptNumber) {
+            console.log('🔄 Socket.IO reconnected after', attemptNumber, 'attempts');
+        });
+        
+        socket.on('reconnect_attempt', function(attemptNumber) {
+            if (attemptNumber % 5 === 0) {
+                console.log('🔄 Reconnection attempt:', attemptNumber);
+            }
         });
     } else {
         console.warn('Socket.IO library not loaded');

@@ -782,7 +782,41 @@ if (typeof socket !== 'undefined') {
     console.warn('Socket.IO not available - real-time updates disabled');
 }
 
+// Loading indicator utilities
+function showLoadingIndicator(elementId, message = 'Loading...') {
+    const element = document.getElementById(elementId);
+    if (element && element.tagName === 'TBODY') {
+        element.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-4">
+                    <div class="spinner-border text-primary mb-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted">${message}</div>
+                </td>
+            </tr>
+        `;
+    }
+}
+
+function showLoadingSpinner(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = `
+            <div class="text-center py-3">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+    }
+}
+
 function loadMonitoredFroms() {
+    // Show loading indicators
+    showLoadingIndicator('activeFromsList', 'Loading active from emails...');
+    showLoadingIndicator('inactiveFromsList', 'Loading inactive from emails...');
+    
     fetch('/api/monitored/froms')
         .then(response => response.json())
         .then(data => {
@@ -791,7 +825,11 @@ function loadMonitoredFroms() {
             updateActiveFromsList();
             updateInactiveFromsList();
         })
-        .catch(error => console.error('Error loading monitored froms:', error));
+        .catch(error => {
+            console.error('Error loading monitored froms:', error);
+            document.getElementById('activeFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
+            document.getElementById('inactiveFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
+        });
 }
 
 function updateMonitoredCounts() {
@@ -997,13 +1035,24 @@ function clearSendingRecipients() {
 }
 
 function loadSendingRecipients() {
+    // Show loading in count badges
+    const countElement = document.getElementById('sendingRecipientsCount');
+    const countLargeElement = document.getElementById('sendingRecipientsCountLarge');
+    
+    if (countElement) countElement.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+    if (countLargeElement) countLargeElement.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+    
     fetch('/api/sending/recipients')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('sendingRecipientsCount').textContent = data.count;
-            document.getElementById('sendingRecipientsCountLarge').textContent = data.count;
+            if (countElement) countElement.textContent = data.count;
+            if (countLargeElement) countLargeElement.textContent = data.count;
         })
-        .catch(error => console.error('Error loading recipients:', error));
+        .catch(error => {
+            console.error('Error loading recipients:', error);
+            if (countElement) countElement.textContent = '?';
+            if (countLargeElement) countLargeElement.textContent = '?';
+        });
 }
 
 function startSendingCampaign() {

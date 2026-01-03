@@ -866,6 +866,61 @@ def new_email():
     try:
         data = request.json
         account_name = data.get('account_name')
+        from_email = data.get('from_email')
+        subject = data.get('subject', '')
+        
+        # Check if this is a recheck response FIRST
+        is_recheck_response = False
+        
+        if 'RECHECK_' in subject and recheck_campaign_running:
+            # Extract unique_id from subject (format: RECHECK_xxxxxxxxxxxx)
+            import re
+            match = re.search(r'RECHECK_([a-f0-9]{12})', subject)
+            if match:
+                unique_id = f"RECHECK_{match.group(1)}"
+                is_recheck_response = True
+                
+                try:
+                    campaign_data = load_recheck_active()
+                    if campaign_data:
+                        froms_tested = campaign_data.get('froms_tested', {})
+                        
+                        # Find matching from email by unique_id (the from_email is the one being tested)
+                        for test_email, test_data in froms_tested.items():
+                            test_unique_id = test_data.get('unique_id', '')
+                            if test_unique_id == unique_id:
+                                # Only mark as working if not already marked (prevent duplicates)
+                                if test_data.get('status') != 'working':
+                                    test_data['status'] = 'working'
+                                    test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    test_data['response_from'] = from_email  # Track what email responded
+                                    campaign_data['froms_tested'][test_email] = test_data
+                                    save_recheck_active(campaign_data)
+                                    
+                                    # Count stats
+                                    working = sum(1 for d in froms_tested.values() if d.get('status') == 'working')
+                                    failed = sum(1 for d in froms_tested.values() if d.get('status') == 'failed')
+                                    pending = sum(1 for d in froms_tested.values() if d.get('status') == 'pending')
+                                    
+                                    # Emit Socket.IO event
+                                    if recheck_campaign_callback:
+                                        recheck_campaign_callback({
+                                            'type': 'recheck_response_detected',
+                                            'from_email': test_email,
+                                            'working_count': working,
+                                            'pending_count': pending,
+                                            'failed_count': failed
+                                        })
+                                    
+                                    print(f"✅ Recheck response detected: {test_email} (responded from {from_email})")
+                                break
+                except Exception as e:
+                    print(f"Error processing recheck response: {e}")
+        
+        if is_recheck_response:
+            print(f"� Recheck response - NOT adding {from_email} to active froms automatically")
+        else:
+            print(f"�📧 New email received: {account_name} - {from_email} - {subject}")
         
         with monitored_lock:
             if account_name not in monitored_data['accounts']:
@@ -877,23 +932,24 @@ def new_email():
                     'last_email': None
                 }
             
-            # Add new from email if unique
-            from_email = data.get('from_email')
-            if from_email and from_email not in monitored_data['accounts'][account_name]['from_emails']:
-                monitored_data['accounts'][account_name]['from_emails'].append(from_email)
-                monitored_data['accounts'][account_name]['from_count'] += 1
-                
-                # Add to system (prevent duplicates, activate if inactive)
-                result = add_or_update_from_email(from_email, 'active')
-                if result == 'updated':
-                    print(f"📧 From email {from_email} moved from inactive to active")
+            # Only add to active froms if this is NOT a recheck response
+            if not is_recheck_response:
+                # Add new from email if unique
+                if from_email and from_email not in monitored_data['accounts'][account_name]['from_emails']:
+                    monitored_data['accounts'][account_name]['from_emails'].append(from_email)
+                    monitored_data['accounts'][account_name]['from_count'] += 1
+                    
+                    # Add to system (prevent duplicates, activate if inactive)
+                    result = add_or_update_from_email(from_email, 'active')
+                    if result == 'updated':
+                        print(f"📧 From email {from_email} moved from inactive to active")
             
             # Add email to account
             email_data = {
                 'from_email': from_email,
                 'from_raw': data.get('from_raw'),
                 'to': data.get('to'),
-                'subject': data.get('subject'),
+                'subject': subject,
                 'date': data.get('date'),
                 'timestamp': data.get('timestamp')
             }
@@ -911,55 +967,14 @@ def new_email():
                 all_froms.update(account['from_emails'])
             monitored_data['unique_froms'] = len(all_froms)
         
-        print(f"📧 New email received: {account_name} - {from_email} - {data.get('subject')}")
-        
-        # Check if this is a recheck response
-        subject = data.get('subject', '')
-        if 'RECHECK_' in subject and recheck_campaign_running:
-            # Extract unique_id
-            try:
-                campaign_data = load_recheck_active()
-                if campaign_data:
-                    froms_tested = campaign_data.get('froms_tested', {})
-                    
-                    # Find matching from email by unique_id in subject
-                    for test_email, test_data in froms_tested.items():
-                        unique_id = test_data.get('unique_id', '')
-                        if unique_id and unique_id in subject:
-                            # Only mark as working if not already marked (prevent duplicates)
-                            if test_data.get('status') != 'working':
-                                test_data['status'] = 'working'
-                                test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                campaign_data['froms_tested'][test_email] = test_data
-                                save_recheck_active(campaign_data)
-                                
-                                # Count stats
-                                working = sum(1 for d in froms_tested.values() if d.get('status') == 'working')
-                                failed = sum(1 for d in froms_tested.values() if d.get('status') == 'failed')
-                                pending = sum(1 for d in froms_tested.values() if d.get('status') == 'pending')
-                                
-                                # Emit Socket.IO event
-                                if recheck_campaign_callback:
-                                    recheck_campaign_callback({
-                                        'type': 'recheck_response_detected',
-                                        'from_email': test_email,
-                                        'working_count': working,
-                                        'pending_count': pending,
-                                        'failed_count': failed
-                                    })
-                                
-                                print(f"✅ Recheck response detected for: {test_email}")
-                            break
-            except Exception as e:
-                print(f"Error processing recheck response: {e}")
-        
-        # Emit to connected clients via SocketIO
-        socketio.emit('new_monitored_email', {
-            'account': account_name,
-            'from': from_email,
-            'subject': data.get('subject'),
-            'timestamp': data.get('timestamp')
-        })
+        # Emit to connected clients via SocketIO (only if NOT recheck response)
+        if not is_recheck_response:
+            socketio.emit('new_monitored_email', {
+                'account': account_name,
+                'from': from_email,
+                'subject': subject,
+                'timestamp': data.get('timestamp')
+            })
         
         return jsonify({'status': 'success'}), 200
     except Exception as e:
@@ -1375,10 +1390,10 @@ def swap_recheck_results():
     try:
         status_dict = load_from_status()
         
-        # Get current active emails
+        # Get current active emails (these will become inactive)
         old_active = [email for email, status in status_dict.items() if status == 'active']
         
-        # Get working emails from recheck results
+        # Get working emails from recheck results (these will become active)
         campaign_data = load_recheck_active()
         if not campaign_data:
             return jsonify({'success': False, 'message': 'No recheck results found'}), 400
@@ -1389,21 +1404,45 @@ def swap_recheck_results():
         if not working_emails:
             return jsonify({'success': False, 'message': 'No working emails found in results'}), 400
         
-        # Perform swap
+        # Step 1: Move ALL old active emails to inactive
+        moved_to_inactive = 0
         for email in old_active:
             status_dict[email] = 'inactive'
+            moved_to_inactive += 1
+            print(f"📥 Moved to inactive: {email}")
         
+        # Step 2: Move ALL working emails to active (remove from inactive if exists)
+        moved_to_active = 0
         for email in working_emails:
+            # Remove from any other status first to enforce single status rule
+            if email in status_dict and status_dict[email] != 'active':
+                print(f"🔄 Removing {email} from {status_dict[email]} before making active")
+            
             status_dict[email] = 'active'
+            moved_to_active += 1
+            print(f"📤 Moved to active: {email}")
+        
+        # Step 3: Final cleanup - ensure no duplicates (each email has ONE status)
+        # Already handled by using dict, but verify counts
+        active_count = sum(1 for s in status_dict.values() if s == 'active')
+        inactive_count = sum(1 for s in status_dict.values() if s == 'inactive')
         
         save_from_status(status_dict)
         
+        print(f"✅ Swap complete: {moved_to_inactive} moved to inactive, {moved_to_active} moved to active")
+        print(f"📊 Final counts: {active_count} active, {inactive_count} inactive")
+        
         return jsonify({
             'success': True,
-            'moved_to_inactive': len(old_active),
-            'moved_to_active': len(working_emails)
+            'moved_to_inactive': moved_to_inactive,
+            'moved_to_active': moved_to_active,
+            'final_active_count': active_count,
+            'final_inactive_count': inactive_count
         })
     except Exception as e:
+        print(f"❌ Error swapping results: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/recheck/start', methods=['POST'])
