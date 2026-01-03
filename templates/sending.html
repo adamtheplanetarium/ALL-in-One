@@ -541,9 +541,9 @@ copermerv2026@yahoo.com</textarea>
                             </div>
                         </div>
                         <div class="col-md-3 text-center">
-                            <h6 class="text-muted">Next Batch In</h6>
-                            <div class="display-4 text-primary fw-bold" id="recheckBatchCountdown">5</div>
-                            <small class="text-muted">seconds</small>
+                            <h6 class="text-success">✅ Confirmed Working</h6>
+                            <div class="display-4 text-success fw-bold" id="recheckBatchCountdown">0</div>
+                            <small class="text-muted">from emails</small>
                         </div>
                     </div>
                 </div>
@@ -1468,9 +1468,6 @@ function copyToClipboard(text) {
 let recheckProgressModal;
 let recheckResultsModal;
 let recheckCountdownInterval;
-let recheckBatchCountdownInterval;
-let recheckBatchCounter = 5;
-let recheckFirstCycle = true;
 let recheckResults = { working: [], failed: [], pending: [] };
 let recheckWorkingEmails = new Set(); // Track working emails
 
@@ -1562,15 +1559,12 @@ function startRecheckCampaign() {
             document.getElementById('recheckWorkingCount').textContent = '0';
             document.getElementById('recheckPendingCount').textContent = '0';
             document.getElementById('recheckFailedCount').textContent = '0';
+            document.getElementById('recheckBatchCountdown').textContent = '0'; // Confirmed working count
             document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
             document.getElementById('recheckWorkingLog').value = ''; // Clear working log
             recheckWorkingEmails.clear(); // Clear working set
             
-            // Start batch countdown
-            startBatchCountdown();
-            document.getElementById('recheckSendingText').textContent = '0/0 (0%)';
             document.getElementById('recheckPhase2').style.display = 'none';
-            document.getElementById('recheckWorkingCount').textContent = '0';
             document.getElementById('recheckPendingCount').textContent = '0';
             document.getElementById('recheckFailedCount').textContent = '0';
             document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
@@ -1604,9 +1598,6 @@ function stopRecheckCampaign() {
             if (recheckCountdownInterval) {
                 clearInterval(recheckCountdownInterval);
             }
-            if (recheckBatchCountdownInterval) {
-                clearInterval(recheckBatchCountdownInterval);
-            }
             document.getElementById('stopRecheckBtn').style.display = 'none';
             document.getElementById('viewResultsBtn').style.display = 'inline-block';
             document.getElementById('closeRecheckModal').style.display = 'inline-block';
@@ -1615,28 +1606,6 @@ function stopRecheckCampaign() {
             promptSwapResults();
         }
     });
-}
-
-// Start batch countdown (5→1, then 8→1, cycling)
-function startBatchCountdown() {
-    recheckBatchCounter = recheckFirstCycle ? 5 : 8;
-    document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
-    
-    if (recheckBatchCountdownInterval) {
-        clearInterval(recheckBatchCountdownInterval);
-    }
-    
-    recheckBatchCountdownInterval = setInterval(() => {
-        recheckBatchCounter--;
-        document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
-        
-        if (recheckBatchCounter <= 0) {
-            // Reset counter
-            recheckFirstCycle = false;
-            recheckBatchCounter = 8;
-            document.getElementById('recheckBatchCountdown').textContent = recheckBatchCounter;
-        }
-    }, 1000);
 }
 
 // Start 5-minute countdown
@@ -1939,12 +1908,6 @@ if (typeof socket !== 'undefined') {
     
     socket.on('recheck_sending_complete', function(data) {
         addRecheckActivity('✅ All test emails sent! Starting 5-minute countdown...', 'success');
-        
-        // Stop batch countdown
-        if (recheckBatchCountdownInterval) {
-            clearInterval(recheckBatchCountdownInterval);
-        }
-        
         startRecheckCountdown();
     });
     
@@ -1953,6 +1916,9 @@ if (typeof socket !== 'undefined') {
         document.getElementById('recheckWorkingCount').textContent = data.working_count;
         document.getElementById('recheckPendingCount').textContent = data.pending_count;
         document.getElementById('recheckFailedCount').textContent = data.failed_count;
+        
+        // Update confirmed working counter (top right)
+        document.getElementById('recheckBatchCountdown').textContent = data.working_count;
         
         // Add to activity
         addRecheckActivity(`✅ Response detected from: ${data.from_email}`, 'success');
