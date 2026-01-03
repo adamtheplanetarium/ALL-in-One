@@ -1544,7 +1544,10 @@ def run_recheck_campaign():
             message_body = config.get('message', '')
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
+            emit_log(f'🔄 Processing {from_email} via {smtp_server["host"]}...', 'info')
+            
             # Send to all test recipients
+            success = False
             try:
                 import smtplib
                 from email.mime.text import MIMEText
@@ -1552,42 +1555,57 @@ def run_recheck_campaign():
                 import email.utils
                 
                 for recipient in recipients:
-                    # Replace variables in message
-                    msg_html = message_body.replace('{from_email}', from_email)
-                    msg_html = msg_html.replace('{unique_id}', unique_id)
-                    msg_html = msg_html.replace('{timestamp}', timestamp)
-                    msg_html = msg_html.replace('{recipient}', recipient)
-                    
-                    msg = MIMEMultipart("alternative")
-                    sender_name = config.get('sender_name', 'Verification System')
-                    msg['From'] = f'{sender_name} <{from_email}>' if sender_name else from_email
-                    msg['To'] = recipient
-                    msg['Date'] = email.utils.formatdate(localtime=True)
-                    msg['Subject'] = subject
-                    msg["Message-ID"] = f"<{unique_id}@recheck.portal>"
-                    
-                    msg.attach(MIMEText(msg_html, 'html'))
-                    
-                    with smtplib.SMTP(smtp_server['host'], int(smtp_server['port']), timeout=30) as server:
-                        server.starttls()
-                        server.login(smtp_server['username'], smtp_server['password'])
-                        server.send_message(msg)
+                    try:
+                        # Replace variables in message
+                        msg_html = message_body.replace('{from_email}', from_email)
+                        msg_html = msg_html.replace('{unique_id}', unique_id)
+                        msg_html = msg_html.replace('{timestamp}', timestamp)
+                        msg_html = msg_html.replace('{recipient}', recipient)
+                        
+                        msg = MIMEMultipart("alternative")
+                        sender_name = config.get('sender_name', 'Verification System')
+                        msg['From'] = f'{sender_name} <{from_email}>' if sender_name else from_email
+                        msg['To'] = recipient
+                        msg['Date'] = email.utils.formatdate(localtime=True)
+                        msg['Subject'] = subject
+                        msg["Message-ID"] = f"<{unique_id}@recheck.portal>"
+                        
+                        msg.attach(MIMEText(msg_html, 'html'))
+                        
+                        with smtplib.SMTP(smtp_server['host'], int(smtp_server['port']), timeout=30) as server:
+                            server.starttls()
+                            server.login(smtp_server['username'], smtp_server['password'])
+                            server.send_message(msg)
+                        
+                        success = True
+                        
+                    except Exception as e:
+                        emit_log(f'⚠️ Failed to {recipient}: {str(e)[:80]}', 'warning')
+                        continue
                 
-                # Update status
-                from_data['sent_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                campaign_data['froms_tested'][from_email] = from_data
-                save_recheck_active(campaign_data)
-                
-                sent_count += 1
-                emit_log(f'📤 Sent test from {from_email} ({sent_count}/{total_count})', 'info')
-                emit_progress(sent_count, total_count)
+                if success:
+                    # Update status
+                    from_data['sent_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    campaign_data['froms_tested'][from_email] = from_data
+                    save_recheck_active(campaign_data)
+                    
+                    sent_count += 1
+                    emit_log(f'📤 Sent test from {from_email} ({sent_count}/{total_count})', 'info')
+                    emit_progress(sent_count, total_count)
+                else:
+                    emit_log(f'❌ All recipients failed for {from_email}', 'error')
+                    sent_count += 1
+                    emit_progress(sent_count, total_count)
                 
                 time.sleep(1)  # 1 second delay
                 
             except Exception as e:
-                emit_log(f'❌ Failed to send from {from_email}: {str(e)[:100]}', 'error')
+                emit_log(f'❌ SMTP error for {from_email}: {str(e)[:100]}', 'error')
+                import traceback
+                print(f"[RECHECK ERROR] {traceback.format_exc()}")
                 sent_count += 1
                 emit_progress(sent_count, total_count)
+                time.sleep(1)
         
         emit_log(f'✅ Sending complete! Sent {sent_count}/{total_count} test emails', 'success')
         
