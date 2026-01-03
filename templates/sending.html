@@ -308,7 +308,7 @@
                         
                         <!-- Configuration Form -->
                         <div class="row mb-4">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><strong>From Source to Test</strong></label>
                                 <select class="form-control" id="recheckFromSource">
                                     <option value="active">Active Froms Only</option>
@@ -318,7 +318,13 @@
                                 <small class="text-muted">Select which from addresses to test</small>
                             </div>
                             
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label"><strong>Concurrent Threads</strong></label>
+                                <input type="number" class="form-control" id="recheckThreads" value="3" min="1" max="10">
+                                <small class="text-muted">Number of parallel sending threads (1-10)</small>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label"><strong>Sender Name</strong></label>
                                 <input type="text" class="form-control" id="recheckSenderName" value="Verification System" placeholder="Verification System">
                                 <small class="text-muted">Name shown in "From" field</small>
@@ -1279,8 +1285,10 @@ let recheckResults = { working: [], failed: [], pending: [] };
 
 // Save recheck configuration
 function saveRecheckConfig() {
+    const threads = parseInt(document.getElementById('recheckThreads').value) || 3;
     const config = {
         from_source: document.getElementById('recheckFromSource').value,
+        threads: Math.min(Math.max(threads, 1), 10), // Ensure 1-10 range
         sender_name: document.getElementById('recheckSenderName').value,
         subject: document.getElementById('recheckSubject').value,
         recipients: document.getElementById('recheckRecipients').value.split('\n').filter(r => r.trim()),
@@ -1308,8 +1316,10 @@ function saveRecheckConfig() {
 // Start recheck campaign
 function startRecheckCampaign() {
     // Save config first
+    const threads = parseInt(document.getElementById('recheckThreads').value) || 3;
     const config = {
         from_source: document.getElementById('recheckFromSource').value,
+        threads: Math.min(Math.max(threads, 1), 10), // Ensure 1-10 range
         sender_name: document.getElementById('recheckSenderName').value,
         subject: document.getElementById('recheckSubject').value,
         recipients: document.getElementById('recheckRecipients').value.split('\n').filter(r => r.trim()),

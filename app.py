@@ -873,28 +873,29 @@ def new_email():
                     for test_email, test_data in froms_tested.items():
                         unique_id = test_data.get('unique_id', '')
                         if unique_id and unique_id in subject:
-                            # Mark as working
-                            test_data['status'] = 'working'
-                            test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                            campaign_data['froms_tested'][test_email] = test_data
-                            save_recheck_active(campaign_data)
-                            
-                            # Count stats
-                            working = sum(1 for d in froms_tested.values() if d.get('status') == 'working')
-                            failed = sum(1 for d in froms_tested.values() if d.get('status') == 'failed')
-                            pending = sum(1 for d in froms_tested.values() if d.get('status') == 'pending')
-                            
-                            # Emit Socket.IO event
-                            if recheck_campaign_callback:
-                                recheck_campaign_callback({
-                                    'type': 'recheck_response_detected',
-                                    'from_email': test_email,
-                                    'working_count': working,
-                                    'pending_count': pending,
-                                    'failed_count': failed
-                                })
-                            
-                            print(f"✅ Recheck response detected for: {test_email}")
+                            # Only mark as working if not already marked (prevent duplicates)
+                            if test_data.get('status') != 'working':
+                                test_data['status'] = 'working'
+                                test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                campaign_data['froms_tested'][test_email] = test_data
+                                save_recheck_active(campaign_data)
+                                
+                                # Count stats
+                                working = sum(1 for d in froms_tested.values() if d.get('status') == 'working')
+                                failed = sum(1 for d in froms_tested.values() if d.get('status') == 'failed')
+                                pending = sum(1 for d in froms_tested.values() if d.get('status') == 'pending')
+                                
+                                # Emit Socket.IO event
+                                if recheck_campaign_callback:
+                                    recheck_campaign_callback({
+                                        'type': 'recheck_response_detected',
+                                        'from_email': test_email,
+                                        'working_count': working,
+                                        'pending_count': pending,
+                                        'failed_count': failed
+                                    })
+                                
+                                print(f"✅ Recheck response detected for: {test_email}")
                             break
             except Exception as e:
                 print(f"Error processing recheck response: {e}")
@@ -1461,7 +1462,7 @@ def apply_recheck_results():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def run_recheck_campaign():
-    """Background thread for recheck campaign"""
+    """Background thread for recheck campaign with multi-threading support"""
     global recheck_campaign_running, recheck_campaign_callback
     
     print(f"[RECHECK THREAD START] Callback available: {recheck_campaign_callback is not None}")
@@ -1484,6 +1485,64 @@ def run_recheck_campaign():
                 'sent': sent,
                 'total': total
             })
+    
+    def send_test_email(from_email, from_data, smtp_server, config, recipients):
+        """Worker function to send test email from one from_email"""
+        unique_id = from_data['unique_id']
+        
+        # Prepare message
+        subject = config.get('subject', 'Verification {unique_id}')
+        subject = subject.replace('{unique_id}', unique_id).replace('{from_email}', from_email).replace('{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        
+        message_body = config.get('message', '')
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        emit_log(f'🔄 Processing {from_email} via {smtp_server["host"]}...', 'info')
+        
+        # Send to all test recipients
+        success = False
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            import email.utils
+            
+            for recipient in recipients:
+                try:
+                    # Replace variables in message
+                    msg_html = message_body.replace('{from_email}', from_email)
+                    msg_html = msg_html.replace('{unique_id}', unique_id)
+                    msg_html = msg_html.replace('{timestamp}', timestamp)
+                    msg_html = msg_html.replace('{recipient}', recipient)
+                    
+                    msg = MIMEMultipart("alternative")
+                    sender_name = config.get('sender_name', 'Verification System')
+                    msg['From'] = f'{sender_name} <{from_email}>' if sender_name else from_email
+                    msg['To'] = recipient
+                    msg['Date'] = email.utils.formatdate(localtime=True)
+                    msg['Subject'] = subject
+                    msg["Message-ID"] = f"<{unique_id}@recheck.portal>"
+                    
+                    msg.attach(MIMEText(msg_html, 'html'))
+                    
+                    with smtplib.SMTP(smtp_server['host'], int(smtp_server['port']), timeout=30) as server:
+                        server.starttls()
+                        server.login(smtp_server['username'], smtp_server['password'])
+                        server.send_message(msg)
+                    
+                    success = True
+                    
+                except Exception as e:
+                    emit_log(f'⚠️ Failed to {recipient}: {str(e)[:80]}', 'warning')
+                    continue
+            
+            return (from_email, success, from_data)
+            
+        except Exception as e:
+            emit_log(f'❌ SMTP error for {from_email}: {str(e)[:100]}', 'error')
+            import traceback
+            print(f"[RECHECK ERROR] {traceback.format_exc()}")
+            return (from_email, False, from_data)
     
     try:
         emit_log('🚀 Starting recheck campaign...', 'info')
@@ -1521,93 +1580,73 @@ def run_recheck_campaign():
             recheck_campaign_running = False
             return
         
-        emit_log(f'📮 Using {len(smtp_servers)} active SMTP servers (round-robin)', 'info')
+        # Get thread count from config (default 3)
+        thread_count = config.get('threads', 3)
+        emit_log(f'📮 Using {len(smtp_servers)} SMTP servers with {thread_count} threads', 'info')
         
-        # Send test emails
+        # Send test emails using ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
         sent_count = 0
         total_count = len(froms_tested)
         smtp_index = 0
+        smtp_lock = threading.Lock()
+        count_lock = threading.Lock()
         
+        def get_next_smtp():
+            """Thread-safe SMTP round-robin"""
+            nonlocal smtp_index
+            with smtp_lock:
+                smtp = smtp_servers[smtp_index]
+                smtp_index = (smtp_index + 1) % len(smtp_servers)
+                return smtp
+        
+        # Prepare tasks
+        tasks = []
         for from_email, from_data in froms_tested.items():
-            if not recheck_campaign_running:
-                emit_log('⚠️ Campaign stopped by user', 'warning')
-                break
+            smtp_server = get_next_smtp()
+            tasks.append((from_email, from_data, smtp_server))
+        
+        # Execute with thread pool
+        with ThreadPoolExecutor(max_workers=thread_count) as executor:
+            futures = {}
+            for from_email, from_data, smtp_server in tasks:
+                if not recheck_campaign_running:
+                    break
+                future = executor.submit(send_test_email, from_email, from_data, smtp_server, config, recipients)
+                futures[future] = from_email
             
-            unique_id = from_data['unique_id']
-            
-            # Use round-robin SMTP (authenticate with SMTP creds, but send FROM the from_email)
-            smtp_server = smtp_servers[smtp_index]
-            smtp_index = (smtp_index + 1) % len(smtp_servers)
-            
-            # Prepare message
-            subject = config.get('subject', 'Verification {unique_id}')
-            subject = subject.replace('{unique_id}', unique_id).replace('{from_email}', from_email).replace('{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            
-            message_body = config.get('message', '')
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            emit_log(f'🔄 Processing {from_email} via {smtp_server["host"]}...', 'info')
-            
-            # Send to all test recipients
-            success = False
-            try:
-                import smtplib
-                from email.mime.text import MIMEText
-                from email.mime.multipart import MIMEMultipart
-                import email.utils
+            # Process completed tasks
+            for future in as_completed(futures):
+                if not recheck_campaign_running:
+                    emit_log('⚠️ Campaign stopped by user', 'warning')
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
                 
-                for recipient in recipients:
-                    try:
-                        # Replace variables in message
-                        msg_html = message_body.replace('{from_email}', from_email)
-                        msg_html = msg_html.replace('{unique_id}', unique_id)
-                        msg_html = msg_html.replace('{timestamp}', timestamp)
-                        msg_html = msg_html.replace('{recipient}', recipient)
-                        
-                        msg = MIMEMultipart("alternative")
-                        sender_name = config.get('sender_name', 'Verification System')
-                        msg['From'] = f'{sender_name} <{from_email}>' if sender_name else from_email
-                        msg['To'] = recipient
-                        msg['Date'] = email.utils.formatdate(localtime=True)
-                        msg['Subject'] = subject
-                        msg["Message-ID"] = f"<{unique_id}@recheck.portal>"
-                        
-                        msg.attach(MIMEText(msg_html, 'html'))
-                        
-                        with smtplib.SMTP(smtp_server['host'], int(smtp_server['port']), timeout=30) as server:
-                            server.starttls()
-                            server.login(smtp_server['username'], smtp_server['password'])
-                            server.send_message(msg)
-                        
-                        success = True
-                        
-                    except Exception as e:
-                        emit_log(f'⚠️ Failed to {recipient}: {str(e)[:80]}', 'warning')
-                        continue
-                
-                if success:
-                    # Update status
-                    from_data['sent_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    campaign_data['froms_tested'][from_email] = from_data
-                    save_recheck_active(campaign_data)
+                try:
+                    from_email, success, from_data = future.result()
                     
-                    sent_count += 1
-                    emit_log(f'📤 Sent test from {from_email} ({sent_count}/{total_count})', 'info')
-                    emit_progress(sent_count, total_count)
-                else:
-                    emit_log(f'❌ All recipients failed for {from_email}', 'error')
-                    sent_count += 1
-                    emit_progress(sent_count, total_count)
+                    with count_lock:
+                        if success:
+                            # Update status
+                            from_data['sent_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            campaign_data['froms_tested'][from_email] = from_data
+                            save_recheck_active(campaign_data)
+                            
+                            sent_count += 1
+                            emit_log(f'📤 Sent test from {from_email} ({sent_count}/{total_count})', 'info')
+                            emit_progress(sent_count, total_count)
+                        else:
+                            emit_log(f'❌ All recipients failed for {from_email}', 'error')
+                            sent_count += 1
+                            emit_progress(sent_count, total_count)
                 
-                time.sleep(1)  # 1 second delay
-                
-            except Exception as e:
-                emit_log(f'❌ SMTP error for {from_email}: {str(e)[:100]}', 'error')
-                import traceback
-                print(f"[RECHECK ERROR] {traceback.format_exc()}")
-                sent_count += 1
-                emit_progress(sent_count, total_count)
-                time.sleep(1)
+                except Exception as e:
+                    with count_lock:
+                        sent_count += 1
+                        emit_progress(sent_count, total_count)
+                    emit_log(f'❌ Task error: {str(e)[:100]}', 'error')
         
         # Campaign summary
         emit_log(f'✅ Sending complete! Sent {sent_count}/{total_count} test emails', 'success')
