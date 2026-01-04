@@ -1725,6 +1725,11 @@ def run_recheck_campaign():
         """Worker function to send test email from one from_email"""
         unique_id = from_data['unique_id']
         
+        # Check if SMTP has too many failures
+        if smtp_server.get('failures', 0) >= 5:
+            emit_log(f'⚠️ Skipping {smtp_server["host"]} (marked as failed after 5 errors)', 'warning')
+            return (from_email, False, from_data, smtp_server, True)  # Return smtp_failed=True
+        
         # Prepare message
         subject = config.get('subject', 'Verification {unique_id}')
         subject = subject.replace('{unique_id}', unique_id).replace('{from_email}', from_email).replace('{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
@@ -1736,6 +1741,7 @@ def run_recheck_campaign():
         
         # Send to all test recipients
         success = False
+        smtp_error = False
         try:
             import smtplib
             from email.mime.text import MIMEText
@@ -1766,18 +1772,27 @@ def run_recheck_campaign():
                         server.send_message(msg)
                     
                     success = True
+                    # Reset failure count on success
+                    smtp_server['failures'] = 0
                     
                 except Exception as e:
                     emit_log(f'⚠️ Failed to {recipient}: {str(e)[:80]}', 'warning')
                     continue
             
-            return (from_email, success, from_data)
+            return (from_email, success, from_data, smtp_server, False)
             
         except Exception as e:
-            emit_log(f'❌ SMTP error for {from_email}: {str(e)[:100]}', 'error')
+            smtp_error = True
+            smtp_server['failures'] = smtp_server.get('failures', 0) + 1
+            
+            if smtp_server['failures'] >= 5:
+                emit_log(f'❌ SMTP {smtp_server["host"]} FAILED 5 times - MARKING AS INACTIVE', 'error')
+            else:
+                emit_log(f'❌ SMTP error for {from_email} ({smtp_server["failures"]}/5 failures): {str(e)[:100]}', 'error')
+            
             import traceback
             print(f"[RECHECK ERROR] {traceback.format_exc()}")
-            return (from_email, False, from_data)
+            return (from_email, False, from_data, smtp_server, True)
     
     try:
         emit_log('🚀 Starting recheck campaign...', 'info')
@@ -1795,10 +1810,29 @@ def run_recheck_campaign():
         emit_log(f'📋 Testing {len(froms_tested)} from addresses', 'info')
         emit_log(f'📧 Sending to {len(recipients)} test recipients', 'info')
         
-        # Load active SMTP servers (round-robin)
+        # Load WORKING SMTP servers only (prioritize working_smtp.txt, fallback to active from smtp.txt)
+        working_smtp_file = os.path.join('Basic', 'working_smtp.txt')
         smtp_file = os.path.join('Basic', 'smtp.txt')
         smtp_servers = []
-        if os.path.exists(smtp_file):
+        
+        # Try working_smtp.txt first
+        if os.path.exists(working_smtp_file):
+            with open(working_smtp_file, 'r') as f:
+                for line in f:
+                    parts = line.strip().split(',')
+                    if len(parts) >= 4:
+                        smtp_servers.append({
+                            'host': parts[0],
+                            'port': parts[1],
+                            'username': parts[2],
+                            'password': parts[3],
+                            'failures': 0  # Track failures
+                        })
+            if smtp_servers:
+                emit_log(f'✅ Loaded {len(smtp_servers)} WORKING SMTPs from working_smtp.txt', 'success')
+        
+        # Fallback to smtp.txt if no working_smtp.txt or empty
+        if not smtp_servers and os.path.exists(smtp_file):
             with open(smtp_file, 'r') as f:
                 for line in f:
                     parts = line.strip().split(',')
@@ -1807,11 +1841,14 @@ def run_recheck_campaign():
                             'host': parts[0],
                             'port': parts[1],
                             'username': parts[2],
-                            'password': parts[3]
+                            'password': parts[3],
+                            'failures': 0  # Track failures
                         })
+            if smtp_servers:
+                emit_log(f'📋 Loaded {len(smtp_servers)} active SMTPs from smtp.txt', 'info')
         
         if not smtp_servers:
-            emit_log('❌ No active SMTP servers available', 'error')
+            emit_log('❌ No working SMTP servers available. Please add working SMTPs to working_smtp.txt', 'error')
             recheck_campaign_running = False
             return
         
@@ -1830,12 +1867,22 @@ def run_recheck_campaign():
         count_lock = threading.Lock()
         
         def get_next_smtp():
-            """Thread-safe SMTP round-robin"""
+            """Thread-safe SMTP round-robin - skip failed SMTPs"""
             nonlocal smtp_index
             with smtp_lock:
-                smtp = smtp_servers[smtp_index]
-                smtp_index = (smtp_index + 1) % len(smtp_servers)
-                return smtp
+                # Try to find a working SMTP (not failed 5 times)
+                attempts = 0
+                while attempts < len(smtp_servers):
+                    smtp = smtp_servers[smtp_index]
+                    smtp_index = (smtp_index + 1) % len(smtp_servers)
+                    
+                    if smtp.get('failures', 0) < 5:
+                        return smtp
+                    
+                    attempts += 1
+                
+                # All SMTPs failed - return first one anyway (will be skipped in send function)
+                return smtp_servers[0]
         
         # Prepare tasks
         tasks = []
@@ -1860,7 +1907,25 @@ def run_recheck_campaign():
                     break
                 
                 try:
-                    from_email, success, from_data = future.result()
+                    from_email, success, from_data, smtp_server, smtp_failed = future.result()
+                    
+                    # Check if SMTP failed and needs to be marked inactive
+                    if smtp_failed and smtp_server.get('failures', 0) >= 5:
+                        # Mark SMTP as inactive in smtp.txt
+                        smtp_file = os.path.join('Basic', 'smtp.txt')
+                        if os.path.exists(smtp_file):
+                            lines = []
+                            with open(smtp_file, 'r') as f:
+                                for line in f:
+                                    parts = line.strip().split(',')
+                                    if len(parts) >= 5 and parts[0] == smtp_server['host']:
+                                        parts[4] = 'inactive'
+                                        lines.append(','.join(parts) + '\n')
+                                        emit_log(f'🚫 Marked {smtp_server["host"]} as INACTIVE in smtp.txt', 'warning')
+                                    else:
+                                        lines.append(line)
+                            with open(smtp_file, 'w') as f:
+                                f.writelines(lines)
                     
                     with count_lock:
                         if success:
