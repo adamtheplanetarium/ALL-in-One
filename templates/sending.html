@@ -475,7 +475,7 @@ copermerv2026@yahoo.com</textarea>
                                 </button>
                             </div>
                             <div>
-                                <button class="btn btn-success btn-lg" onclick="startRecheckCampaign()" id="startRecheckBtn">
+                                <button class="btn btn-success btn-lg" onclick="showRecheckFromSourceModal()" id="startRecheckBtn">
                                     <i class="bi bi-play-circle-fill"></i> Start Recheck Campaign
                                 </button>
                             </div>
@@ -753,6 +753,53 @@ copermerv2026@yahoo.com</textarea>
                     </button>
                 </div>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recheck From Source Selection Modal -->
+<div class="modal fade" id="recheckFromSourceModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> Select From Emails to Recheck</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3">Which from emails should be tested?</h6>
+                
+                <div class="d-grid gap-3">
+                    <button class="btn btn-lg btn-success text-start" onclick="confirmStartRecheck('active')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-check-circle-fill"></i> <strong>Active Froms Only</strong>
+                            </div>
+                            <span class="badge bg-white text-success fs-5" id="recheckModalActiveCount">0</span>
+                        </div>
+                        <small class="text-white-50 d-block mt-1">Test only active from emails</small>
+                    </button>
+                    
+                    <button class="btn btn-lg btn-secondary text-start" onclick="confirmStartRecheck('inactive')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-x-circle-fill"></i> <strong>Inactive Froms Only</strong>
+                            </div>
+                            <span class="badge bg-white text-secondary fs-5" id="recheckModalInactiveCount">0</span>
+                        </div>
+                        <small class="text-white-50 d-block mt-1">Test only inactive from emails</small>
+                    </button>
+                    
+                    <button class="btn btn-lg btn-primary text-start" onclick="confirmStartRecheck('all')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-arrow-left-right"></i> <strong>All Froms</strong>
+                            </div>
+                            <span class="badge bg-white text-primary fs-5" id="recheckModalAllCount">0</span>
+                        </div>
+                        <small class="text-white-50 d-block mt-1">Test both active and inactive</small>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1879,12 +1926,54 @@ function saveRecheckConfig() {
     });
 }
 
+// Show from source selection modal
+function showRecheckFromSourceModal() {
+    // Update counts
+    let activeCount = 0;
+    let inactiveCount = 0;
+    
+    Object.values(monitoredFroms).forEach(account => {
+        account.from_emails.forEach(fromEmail => {
+            if (fromEmail.status === 'active') {
+                activeCount++;
+            } else {
+                inactiveCount++;
+            }
+        });
+    });
+    
+    document.getElementById('recheckModalActiveCount').textContent = activeCount;
+    document.getElementById('recheckModalInactiveCount').textContent = inactiveCount;
+    document.getElementById('recheckModalAllCount').textContent = activeCount + inactiveCount;
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('recheckFromSourceModal'));
+    modal.show();
+}
+
+// Confirm and start recheck with selected source
+function confirmStartRecheck(fromSource) {
+    // Close the modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('recheckFromSourceModal'));
+    if (modal) {
+        modal.hide();
+    }
+    
+    // Update the from_source dropdown
+    document.getElementById('recheckFromSource').value = fromSource;
+    
+    // Start the campaign
+    startRecheckCampaign();
+}
+
 // Start recheck campaign
 function startRecheckCampaign() {
+    // This is now called by confirmStartRecheck() with the from_source parameter
     // Save config first
     const threads = parseInt(document.getElementById('recheckThreads').value) || 3;
+    const fromSource = document.getElementById('recheckFromSource').value; // Get from dropdown
     const config = {
-        from_source: document.getElementById('recheckFromSource').value,
+        from_source: fromSource,
         threads: Math.min(Math.max(threads, 1), 10), // Ensure 1-10 range
         sender_name: document.getElementById('recheckSenderName').value,
         subject: document.getElementById('recheckSubject').value,
@@ -1963,7 +2052,7 @@ function startRecheckCampaign() {
 
 // Stop recheck campaign
 function stopRecheckCampaign() {
-    if (!confirm('Stop the campaign and view results?')) return;
+    if (!confirm('Stop the recheck campaign?')) return;
     
     fetch('/api/recheck/stop', {
         method: 'POST',
@@ -1979,6 +2068,9 @@ function stopRecheckCampaign() {
             document.getElementById('stopRecheckBtn').style.display = 'none';
             document.getElementById('viewResultsBtn').style.display = 'inline-block';
             document.getElementById('closeRecheckModal').style.display = 'inline-block';
+            
+            // Allow fresh restart
+            document.getElementById('startRecheckBtn').disabled = false;
             
             // Prompt to swap results
             promptSwapResults();

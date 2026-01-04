@@ -83,6 +83,9 @@
                     <button class="btn btn-danger btn-lg" id="stopBtn" onclick="stopCampaign()" disabled>
                         <i class="bi bi-stop-fill"></i> Stop Campaign
                     </button>
+                    <button class="btn btn-primary btn-lg" onclick="goToRecheck()">
+                        <i class="bi bi-arrow-repeat"></i> Recheck Froms
+                    </button>
                 </div>
                 <div id="campaignAlert"></div>
             </div>
@@ -177,6 +180,11 @@ function stopCampaign() {
     .catch(err => {
         showAlert('Error stopping campaign: ' + err.message, 'danger');
     });
+}
+
+function goToRecheck() {
+    // Navigate to sending page and activate recheck tab
+    window.location.href = '/sending#recheck-froms';
 }
 
 function updateStats(stats) {
