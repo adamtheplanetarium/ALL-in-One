@@ -940,6 +940,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load recheck config silently (lightweight)
     loadRecheckConfig();
     
+    // Check if recheck campaign is already running
+    checkRecheckStatus();
+    
     // Setup tab change listeners for lazy loading
     setupTabLazyLoading();
     
@@ -2085,27 +2088,44 @@ function saveRecheckConfig() {
 
 // Show from source selection modal
 function showRecheckFromSourceModal() {
-    // Update counts
-    let activeCount = 0;
-    let inactiveCount = 0;
+    console.log('🎬 Opening recheck from source modal...');
     
-    Object.values(monitoredFroms).forEach(account => {
-        account.from_emails.forEach(fromEmail => {
-            if (fromEmail.status === 'active') {
-                activeCount++;
-            } else {
-                inactiveCount++;
-            }
+    try {
+        // Update counts
+        let activeCount = 0;
+        let inactiveCount = 0;
+        
+        Object.values(monitoredFroms).forEach(account => {
+            account.from_emails.forEach(fromEmail => {
+                if (fromEmail.status === 'active') {
+                    activeCount++;
+                } else {
+                    inactiveCount++;
+                }
+            });
         });
-    });
-    
-    document.getElementById('recheckModalActiveCount').textContent = activeCount;
-    document.getElementById('recheckModalInactiveCount').textContent = inactiveCount;
-    document.getElementById('recheckModalAllCount').textContent = activeCount + inactiveCount;
-    
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('recheckFromSourceModal'));
-    modal.show();
+        
+        console.log(`📊 Counts: ${activeCount} active, ${inactiveCount} inactive`);
+        
+        document.getElementById('recheckModalActiveCount').textContent = activeCount;
+        document.getElementById('recheckModalInactiveCount').textContent = inactiveCount;
+        document.getElementById('recheckModalAllCount').textContent = activeCount + inactiveCount;
+        
+        // Show modal
+        const modalElement = document.getElementById('recheckFromSourceModal');
+        if (!modalElement) {
+            console.error('❌ Modal element not found!');
+            alert('Error: Modal element not found. Please refresh the page.');
+            return;
+        }
+        
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+        console.log('✅ Modal opened successfully');
+    } catch (error) {
+        console.error('❌ Error opening modal:', error);
+        alert('Error opening modal: ' + error.message);
+    }
 }
 
 // Confirm and start recheck with selected source
@@ -2139,6 +2159,46 @@ function confirmStartRecheck(fromSource) {
         // Start the campaign
         startRecheckCampaign();
     }
+}
+
+// Check if recheck campaign is already running on page load
+function checkRecheckStatus() {
+    console.log('🔍 Checking if recheck campaign is already running...');
+    
+    fetch('/api/recheck/status')
+        .then(res => res.json())
+        .then(data => {
+            if (data.running) {
+                console.log('⚠️ Recheck campaign is already running! Showing progress modal...');
+                
+                // Initialize modal
+                recheckProgressModal = new bootstrap.Modal(document.getElementById('recheckProgressModal'), {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+                
+                // Show modal
+                recheckProgressModal.show();
+                
+                // Reset working emails set
+                recheckWorkingEmails.clear();
+                
+                // Add alert message
+                addRecheckActivity('🔄 Reconnected to active campaign (page refreshed)', 'info');
+                
+                // Hide "Start Recheck" button in recheck tab
+                const startBtn = document.querySelector('button[onclick*="showRecheckFromSourceModal"]');
+                if (startBtn) {
+                    startBtn.disabled = true;
+                    startBtn.textContent = '⏳ Campaign Running...';
+                }
+            } else {
+                console.log('✅ No active recheck campaign');
+            }
+        })
+        .catch(err => {
+            console.error('Error checking recheck status:', err);
+        });
 }
 
 // Start recheck campaign
@@ -2351,10 +2411,17 @@ function copyRealTimeWorking(event) {
 
 // Stop recheck campaign
 function stopRecheckCampaign() {
-    if (!confirm('Stop the recheck campaign? This will terminate the backend thread.')) return;
+    if (!confirm('Stop the recheck campaign? This will terminate all sending immediately.')) return;
     
     console.log('🛑 Stopping recheck campaign...');
-    addRecheckActivity('🛑 Stopping campaign...', 'warning');
+    addRecheckActivity('🛑 Stopping campaign (please wait)...', 'warning');
+    
+    // Disable stop button to prevent double-click
+    const stopBtn = document.getElementById('stopRecheckBtn');
+    if (stopBtn) {
+        stopBtn.disabled = true;
+        stopBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Stopping...';
+    }
     
     fetch('/api/recheck/stop', {
         method: 'POST',
@@ -2364,22 +2431,37 @@ function stopRecheckCampaign() {
     .then(data => {
         if (data.success) {
             console.log('✅ Recheck campaign stopped on backend');
-            addRecheckActivity('⛔ Campaign stopped by user', 'warning');
+            addRecheckActivity('⛔ Campaign stopped - All threads terminated', 'warning');
+            
             if (recheckCountdownInterval) {
                 clearInterval(recheckCountdownInterval);
             }
-            document.getElementById('stopRecheckBtn').style.display = 'none';
+            
+            if (stopBtn) {
+                stopBtn.style.display = 'none';
+            }
+            
             document.getElementById('viewResultsBtn').style.display = 'inline-block';
             document.getElementById('closeRecheckModal').style.display = 'inline-block';
             
-            // Allow fresh restart
-            document.getElementById('startRecheckBtn').disabled = false;
+            // Re-enable start button in recheck tab
+            const startBtns = document.querySelectorAll('button[onclick*="showRecheckFromSourceModal"]');
+            startBtns.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Start Recheck Campaign';
+            });
             
             // Prompt to swap results
             promptSwapResults();
         } else {
             console.error('❌ Failed to stop campaign:', data.error);
             addRecheckActivity('❌ Failed to stop: ' + (data.error || 'Unknown error'), 'error');
+            
+            // Re-enable stop button
+            if (stopBtn) {
+                stopBtn.disabled = false;
+                stopBtn.innerHTML = '<i class="bi bi-stop-circle"></i> Stop Campaign';
+            }
         }
     })
     .catch(err => {
@@ -2526,30 +2608,43 @@ function promptSwapResults() {
 
 // Execute swap (old active → inactive, new working → active)
 function swapRecheckResults() {
+    console.log('🔄 Starting swap operation...');
+    console.log('📊 Current recheckResults:', recheckResults);
+    
     fetch('/api/recheck/swap_results', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'}
     })
-    .then(res => res.json())
+    .then(res => {
+        console.log('📥 Swap response status:', res.status);
+        return res.json();
+    })
     .then(data => {
+        console.log('📦 Swap response data:', data);
+        
         if (data.success) {
+            console.log(`✅ Swap successful: ${data.moved_to_inactive} → inactive, ${data.moved_to_active} → active`);
             showAlert('recheckAlertContainer', 
                 `✅ Swapped successfully!\n` +
                 `• ${data.moved_to_inactive} old emails → Inactive\n` +
                 `• ${data.moved_to_active} working emails → Active`, 
                 'success');
+            
+            console.log('🔄 Reloading monitored froms...');
             loadMonitoredFroms(); // Refresh the from lists
             
             // Close results modal if open
             if (recheckResultsModal) {
+                console.log('🚪 Closing results modal...');
                 recheckResultsModal.hide();
             }
         } else {
+            console.error('❌ Swap failed:', data.message);
             showAlert('recheckAlertContainer', data.message || 'Error swapping results', 'danger');
         }
     })
     .catch(err => {
-        console.error('Swap error:', err);
+        console.error('❌ Swap network error:', err);
         showAlert('recheckAlertContainer', 'Network error while swapping results', 'danger');
     });
 }
