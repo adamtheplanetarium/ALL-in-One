@@ -268,7 +268,14 @@ def validate_smtp():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 def run_smtp_validation(accounts):
-    """Run SMTP validation in background"""
+    """Run SMTP validation in background
+    
+    INDEPENDENT PROCESS: This runs in a daemon thread and does NOT interfere 
+    with recheck campaigns. Multiple processes can run simultaneously:
+    - SMTP validation (daemon thread)
+    - Recheck campaign (controlled by recheck_campaign_running flag)
+    - Sending campaign (controlled by sending_campaign_running flag)
+    """
     validation_stats = {
         'total': len(accounts),
         'sent': 0,
@@ -1626,9 +1633,12 @@ def stop_recheck_campaign():
     global recheck_campaign_running
     
     try:
+        print("🛑 Stopping recheck campaign...")
         recheck_campaign_running = False
-        return jsonify({'success': True})
+        print(f"✅ Recheck flag set to False. Thread will terminate at next check.")
+        return jsonify({'success': True, 'message': 'Campaign stop signal sent'})
     except Exception as e:
+        print(f"❌ Error stopping recheck: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/recheck/status', methods=['GET'])

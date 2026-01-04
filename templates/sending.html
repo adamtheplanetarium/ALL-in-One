@@ -839,6 +839,21 @@ copermerv2026@yahoo.com</textarea>
     </div>
 </div>
 
+<!-- Loading Overlay -->
+<div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999; display: none; justify-content: center; align-items: center;">
+    <div class="text-center text-white">
+        <div class="spinner-border text-primary" role="status" style="width: 4rem; height: 4rem; border-width: 0.4rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h3 class="mt-4 mb-2" id="loadingTitle">Loading Data...</h3>
+        <p class="mb-2" id="loadingMessage">Please wait</p>
+        <div class="mt-3">
+            <span class="badge bg-primary fs-5" id="loadingStats">0 records</span>
+        </div>
+        <small class="text-muted d-block mt-3" id="loadingTime">Elapsed: 0s</small>
+    </div>
+</div>
+
 <style>
 .spin-animation {
     animation: spin 2s linear infinite;
@@ -871,6 +886,47 @@ function logPerformance(operation, startTime) {
     const duration = (performance.now() - startTime).toFixed(2);
     console.log(`⏱️ ${operation} took ${duration}ms`);
     return duration;
+}
+
+// Loading overlay control
+let loadingStartTime = null;
+let loadingTimerInterval = null;
+
+function showLoading(title = 'Loading Data...', message = 'Please wait', stats = '0 records') {
+    const overlay = document.getElementById('loadingOverlay');
+    document.getElementById('loadingTitle').textContent = title;
+    document.getElementById('loadingMessage').textContent = message;
+    document.getElementById('loadingStats').textContent = stats;
+    document.getElementById('loadingTime').textContent = 'Elapsed: 0s';
+    
+    overlay.style.display = 'flex';
+    loadingStartTime = Date.now();
+    
+    // Update elapsed time every 100ms
+    loadingTimerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - loadingStartTime) / 1000).toFixed(1);
+        document.getElementById('loadingTime').textContent = `Elapsed: ${elapsed}s`;
+    }, 100);
+    
+    console.log(`🔄 Loading overlay shown: ${title}`);
+}
+
+function updateLoading(stats) {
+    document.getElementById('loadingStats').textContent = stats;
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loadingOverlay');
+    overlay.style.display = 'none';
+    
+    if (loadingTimerInterval) {
+        clearInterval(loadingTimerInterval);
+        loadingTimerInterval = null;
+    }
+    
+    const elapsed = loadingStartTime ? ((Date.now() - loadingStartTime) / 1000).toFixed(2) : 0;
+    console.log(`✅ Loading overlay hidden after ${elapsed}s`);
+    loadingStartTime = null;
 }
 
 // Initialize - Load counts immediately, full data on tab clicks
@@ -1164,6 +1220,9 @@ function loadMonitoredFroms(renderLists = true) {
     
     console.log('🔄 Fetching from emails from API...');
     
+    // Show loading overlay
+    showLoading('Loading From Emails', 'Fetching monitored accounts...', 'Connecting...');
+    
     // Show loading on BOTH counts (might be called from either tab)
     const activeCount = document.getElementById('activeFromsCount');
     const inactiveCount = document.getElementById('inactiveFromsCount');
@@ -1174,12 +1233,20 @@ function loadMonitoredFroms(renderLists = true) {
         .then(response => {
             const fetchDuration = logPerformance('API fetch /api/monitored/froms', start);
             console.log('✅ API response received, status:', response.status);
+            updateLoading('Processing response...');
             return response.json();
         })
         .then(data => {
             const parseStart = performance.now();
             console.log('📦 Received data from API:', data);
             console.log('📦 Data keys:', Object.keys(data));
+            
+            // Count total emails
+            let totalEmails = 0;
+            Object.values(data).forEach(account => {
+                totalEmails += account.from_emails ? account.from_emails.length : 0;
+            });
+            updateLoading(`${totalEmails} from emails`);
             
             monitoredFroms = data;
             updateMonitoredCounts();
@@ -1194,11 +1261,15 @@ function loadMonitoredFroms(renderLists = true) {
             
             logPerformance('Parse and render from emails', parseStart);
             logPerformance('Total loadMonitoredFroms', start);
+            
+            // Hide loading overlay
+            hideLoading();
         })
         .catch(error => {
             console.error('❌ Error loading monitored froms:', error);
             if (activeCount) activeCount.textContent = '?';
             if (inactiveCount) inactiveCount.textContent = '?';
+            hideLoading();
         });
 }
 
@@ -2258,7 +2329,10 @@ function copyRealTimeWorking() {
 
 // Stop recheck campaign
 function stopRecheckCampaign() {
-    if (!confirm('Stop the recheck campaign?')) return;
+    if (!confirm('Stop the recheck campaign? This will terminate the backend thread.')) return;
+    
+    console.log('🛑 Stopping recheck campaign...');
+    addRecheckActivity('🛑 Stopping campaign...', 'warning');
     
     fetch('/api/recheck/stop', {
         method: 'POST',
@@ -2267,6 +2341,7 @@ function stopRecheckCampaign() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
+            console.log('✅ Recheck campaign stopped on backend');
             addRecheckActivity('⛔ Campaign stopped by user', 'warning');
             if (recheckCountdownInterval) {
                 clearInterval(recheckCountdownInterval);
@@ -2280,7 +2355,14 @@ function stopRecheckCampaign() {
             
             // Prompt to swap results
             promptSwapResults();
+        } else {
+            console.error('❌ Failed to stop campaign:', data.error);
+            addRecheckActivity('❌ Failed to stop: ' + (data.error || 'Unknown error'), 'error');
         }
+    })
+    .catch(err => {
+        console.error('❌ Error stopping campaign:', err);
+        addRecheckActivity('❌ Network error stopping campaign', 'error');
     });
 }
 
