@@ -939,38 +939,38 @@ function setupTabLazyLoading() {
             const tabStart = performance.now();
             
             // Load data for specific tab ONLY when clicked
-            if (tabId === '#settings-tab-pane') {
+            if (tabId === '#sending-settings') {
                 // Settings tab - already loaded
                 console.log('⚙️ Settings tab (static, no data needed)');
-            } else if (tabId === '#active-froms-tab-pane') {
+            } else if (tabId === '#active-froms') {
                 if (!tabsLoaded['active']) {
                     loadActiveFromsTab();
                     tabsLoaded['active'] = true;
                 } else {
                     console.log('💾 Using cached active froms');
                 }
-            } else if (tabId === '#inactive-froms-tab-pane') {
+            } else if (tabId === '#inactive-froms') {
                 if (!tabsLoaded['inactive']) {
                     loadInactiveFromsTab();
                     tabsLoaded['inactive'] = true;
                 } else {
                     console.log('💾 Using cached inactive froms');
                 }
-            } else if (tabId === '#recheck-froms-tab-pane') {
+            } else if (tabId === '#recheck-froms') {
                 if (!tabsLoaded['recheck']) {
                     loadRecheckTab();
                     tabsLoaded['recheck'] = true;
                 } else {
                     console.log('💾 Using cached recheck results');
                 }
-            } else if (tabId === '#recipients-tab-pane') {
+            } else if (tabId === '#sending-recipients') {
                 if (!tabsLoaded['recipients']) {
                     loadRecipientsTab();
                     tabsLoaded['recipients'] = true;
                 } else {
                     console.log('💾 Using cached recipients');
                 }
-            } else if (tabId === '#console-tab-pane') {
+            } else if (tabId === '#sending-console') {
                 console.log('📋 Console tab (static)');
             }
             
