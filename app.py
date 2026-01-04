@@ -1497,7 +1497,10 @@ def start_recheck_campaign():
     global recheck_campaign_running, recheck_campaign_thread, recheck_campaign_callback
     
     try:
+        print("🚀 Recheck start requested")
+        
         if recheck_campaign_running:
+            print("⚠️ Campaign already running")
             return jsonify({'success': False, 'message': 'Recheck campaign already running'})
         
         # Remove duplicates before starting
@@ -1508,11 +1511,15 @@ def start_recheck_campaign():
         # Load config
         config = load_recheck_config()
         if not config:
+            print("❌ No configuration found")
             return jsonify({'success': False, 'message': 'No configuration found. Please save configuration first.'}), 400
+        
+        print(f"✅ Config loaded: {config.get('from_source', 'active')} source, {len(config.get('recipients', []))} recipients")
         
         # Validate recipients
         recipients = config.get('recipients', [])
         if not recipients:
+            print("❌ No recipients configured")
             return jsonify({'success': False, 'message': 'No test recipients configured'}), 400
         
         # Get from emails based on source
@@ -1521,6 +1528,12 @@ def start_recheck_campaign():
             all_from_emails = []
             for account_data in monitored_data['accounts'].values():
                 all_from_emails.extend(account_data['from_emails'])
+        
+        print(f"📧 Total from emails in monitored data: {len(all_from_emails)}")
+        
+        # Remove duplicates from the list
+        all_from_emails = list(set(all_from_emails))
+        print(f"📧 Unique from emails after dedup: {len(all_from_emails)}")
         
         # Filter based on from_source
         filtered_from_emails = []
@@ -1533,7 +1546,10 @@ def start_recheck_campaign():
             elif from_source == 'all':
                 filtered_from_emails.append(from_email)
         
+        print(f"📧 Filtered {from_source} emails: {len(filtered_from_emails)}")
+        
         if not filtered_from_emails:
+            print(f"❌ No {from_source} from emails available")
             return jsonify({'success': False, 'message': f'No {from_source} from emails available'}), 400
         
         # Define callback for Socket.IO events
@@ -1587,13 +1603,20 @@ def start_recheck_campaign():
         
         save_recheck_active(campaign_data)
         
+        print(f"✅ Campaign initialized with {len(filtered_from_emails)} from emails")
+        
         # Start campaign thread
         recheck_campaign_running = True
         recheck_campaign_thread = threading.Thread(target=run_recheck_campaign, daemon=False)
         recheck_campaign_thread.start()
         
+        print("🎉 Campaign thread started successfully")
+        
         return jsonify({'success': True})
     except Exception as e:
+        print(f"💥 Error starting recheck campaign: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/recheck/stop', methods=['POST'])
