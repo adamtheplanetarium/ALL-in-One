@@ -42,25 +42,76 @@ monitored_lock = threading.Lock()
 # File to store active/inactive status for monitored from emails
 from_status_file = os.path.join('Basic', 'sending_from_status.json')
 
+# Backup mechanism: Store critical status data in environment (for ephemeral filesystems)
+FROM_STATUS_BACKUP_KEY = 'FROM_STATUS_BACKUP'
+
 def load_from_status():
-    """Load active/inactive status from file"""
+    """Load active/inactive status from file with environment backup fallback"""
     try:
+        # Try loading from file first
         if os.path.exists(from_status_file):
             with open(from_status_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                print(f"✅ Loaded {len(data)} from statuses from file")
+                return data
+        
+        # Fallback: Try loading from environment variable (Render.com persistence)
+        backup_json = os.getenv(FROM_STATUS_BACKUP_KEY)
+        if backup_json:
+            print("⚠️ File not found, loading from environment backup")
+            return json.loads(backup_json)
+        
+        print("ℹ️ No from status file or backup found, starting fresh")
         return {}
     except Exception as e:
-        print(f"Error loading from status: {e}")
+        print(f"❌ Error loading from status: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 def save_from_status(status_dict):
-    """Save active/inactive status to file"""
+    """Save active/inactive status to file with verification and environment backup"""
+    temp_file = from_status_file + '.tmp'
     try:
-        with open(from_status_file, 'w') as f:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(from_status_file), exist_ok=True)
+        
+        # Write to temporary file first (atomic write)
+        with open(temp_file, 'w') as f:
             json.dump(status_dict, f, indent=2)
+        
+        # Verify the write was successful
+        with open(temp_file, 'r') as f:
+            verify_data = json.load(f)
+            if len(verify_data) != len(status_dict):
+                raise Exception("Data verification failed - size mismatch")
+        
+        # Replace original file (atomic on POSIX, best-effort on Windows)
+        if os.path.exists(from_status_file):
+            os.replace(temp_file, from_status_file)
+        else:
+            os.rename(temp_file, from_status_file)
+        
+        # BACKUP: Also save to environment variable (survives ephemeral filesystem)
+        # NOTE: This only works if environment is persistent (Render.com config vars)
+        # User must manually add FROM_STATUS_BACKUP to Render.com environment with this value
+        backup_json = json.dumps(status_dict)
+        print(f"✅ Saved {len(status_dict)} from statuses successfully")
+        print(f"💡 TIP: For Render.com, add environment variable FROM_STATUS_BACKUP with value:")
+        print(f"    (First 100 chars): {backup_json[:100]}...")
+        
         return True
     except Exception as e:
-        print(f"Error saving from status: {e}")
+        print(f"❌ Error saving from status: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Clean up temp file if it exists
+        try:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+        except:
+            pass
         return False
 
 def get_from_status(email):
@@ -125,6 +176,46 @@ def index():
     if 'logged_in' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint with filesystem persistence test"""
+    status = {
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'filesystem': {
+            'writable': False,
+            'from_status_exists': os.path.exists(from_status_file),
+            'backup_available': bool(os.getenv(FROM_STATUS_BACKUP_KEY))
+        }
+    }
+    
+    # Test filesystem write
+    test_file = os.path.join('Basic', '.health_test')
+    try:
+        os.makedirs(os.path.dirname(test_file), exist_ok=True)
+        with open(test_file, 'w') as f:
+            f.write(str(time.time()))
+        with open(test_file, 'r') as f:
+            f.read()
+        os.remove(test_file)
+        status['filesystem']['writable'] = True
+    except Exception as e:
+        status['filesystem']['write_error'] = str(e)
+        status['status'] = 'degraded'
+    
+    # Load from status count
+    try:
+        from_status = load_from_status()
+        status['from_status'] = {
+            'total': len(from_status),
+            'active': sum(1 for s in from_status.values() if s == 'active'),
+            'inactive': sum(1 for s in from_status.values() if s == 'inactive')
+        }
+    except Exception as e:
+        status['from_status'] = {'error': str(e)}
+    
+    return jsonify(status)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1680,7 +1771,11 @@ def start_recheck_campaign():
         
         print("🎉 Campaign thread started successfully")
         
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'total_froms': len(filtered_from_emails),
+            'from_source': from_source
+        })
     except Exception as e:
         print(f"💥 Error starting recheck campaign: {e}")
         import traceback
@@ -1705,8 +1800,30 @@ def stop_recheck_campaign():
 @app.route('/api/recheck/status', methods=['GET'])
 @login_required
 def get_recheck_status():
-    """Get recheck campaign status"""
-    return jsonify({'running': recheck_campaign_running})
+    """Get recheck campaign status with SMTP health"""
+    # Get SMTP statuses if campaign is running
+    smtp_status = []
+    if recheck_campaign_running:
+        smtp_file = os.path.join('Basic', 'smtp.txt')
+        if os.path.exists(smtp_file):
+            with open(smtp_file, 'r') as f:
+                lines = f.readlines()
+                for i, line in enumerate(lines[1:], 1):
+                    if line.strip():
+                        parts = line.strip().split(',')
+                        if len(parts) >= 5 and parts[4].strip() == 'active':
+                            smtp_status.append({
+                                'id': i,
+                                'host': parts[0].strip(),
+                                'username': parts[2].strip().split('@')[0] if '@' in parts[2] else parts[2].strip(),
+                                'status': 'active',
+                                'sent': int(parts[5]) if len(parts) > 5 else 0
+                            })
+    
+    return jsonify({
+        'running': recheck_campaign_running,
+        'smtp_servers': smtp_status
+    })
 
 @app.route('/api/recheck/results', methods=['GET'])
 @login_required
@@ -1844,10 +1961,13 @@ def run_recheck_campaign():
         subject = config.get('subject', 'Verification {unique_id}')
         subject = subject.replace('{unique_id}', unique_id).replace('{from_email}', from_email).replace('{timestamp}', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         
+        
         message_body = config.get('message', '')
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        emit_log(f'🔄 Processing {from_email} via {smtp_server["host"]}...', 'info')
+        # Log SMTP being used (more visible)
+        smtp_name = smtp_server.get('username', smtp_server['host']).split('@')[0]  # Extract name before @
+        emit_log(f'📤 Sending via SMTP: {smtp_server["host"]} ({smtp_name}) → {from_email}', 'info')
         
         # Send to all test recipients
         success = False
@@ -1971,6 +2091,11 @@ def run_recheck_campaign():
         
         emit_log(f'✅ Loaded {len(smtp_servers)} ACTIVE SMTPs from /smtp page', 'success')
         
+        # Display available SMTPs
+        for i, smtp in enumerate(smtp_servers, 1):
+            smtp_name = smtp.get('username', smtp['host']).split('@')[0]
+            emit_log(f'   SMTP #{i}: {smtp["host"]} ({smtp_name})', 'info')
+        
         # Get thread count from config (default 3)
         thread_count = config.get('threads', 3)
         emit_log(f'📮 Using {len(smtp_servers)} SMTP servers with {thread_count} threads', 'info')
@@ -2078,8 +2203,20 @@ def run_recheck_campaign():
                         emit_progress(sent_count, total_count)
                     emit_log(f'❌ Task error: {str(e)[:100]}', 'error')
         
+        
         # Campaign summary
         emit_log(f'✅ Sending complete! Sent {sent_count}/{total_count} test emails', 'success')
+        
+        # Report SMTP statuses
+        inactive_smtps = [s for s in smtp_servers if s.get('failures', 0) >= 5 or s.get('auth_failures', 0) >= 3]
+        if inactive_smtps:
+            emit_log(f'⚠️ {len(inactive_smtps)} SMTP(s) marked as INACTIVE due to failures:', 'warning')
+            for smtp in inactive_smtps:
+                smtp_name = smtp.get('username', smtp['host']).split('@')[0]
+                reason = f"{smtp.get('failures', 0)} connection failures" if smtp.get('failures', 0) >= 5 else f"{smtp.get('auth_failures', 0)} auth rejections"
+                emit_log(f'   ❌ {smtp["host"]} ({smtp_name}) - {reason}', 'error')
+        else:
+            emit_log('✅ All SMTPs remain active (no failures)', 'success')
         
         if recheck_campaign_callback:
             recheck_campaign_callback({'type': 'recheck_sending_complete'})

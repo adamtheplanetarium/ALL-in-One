@@ -298,13 +298,18 @@ function renderTable() {
 }
 
 function updateCounts() {
-    const total = servers.length;
-    const active = servers.filter(s => s.status === 'active').length;
-    const inactive = servers.filter(s => s.status === 'inactive' || !s.status).length;
-    
-    document.getElementById('totalCount').textContent = total;
-    document.getElementById('activeCount').textContent = active;
-    document.getElementById('inactiveCount').textContent = inactive;
+    try {
+        const total = servers.length;
+        const active = servers.filter(s => s.status === 'active').length;
+        const inactive = servers.filter(s => s.status === 'inactive' || !s.status).length;
+        
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('activeCount').textContent = active;
+        document.getElementById('inactiveCount').textContent = inactive;
+    } catch (error) {
+        console.error('Error updating SMTP counts:', error);
+        console.error('Servers data:', servers);
+    }
 }
 
 function filterServers(filter) {
@@ -492,12 +497,17 @@ function addValidationLog(message) {
 }
 
 function updateValidationStats(stats) {
-    document.getElementById('validationProgress').textContent = `${stats.completed}/${stats.total}`;
-    document.getElementById('validationProgressBar').style.width = `${(stats.completed/stats.total)*100}%`;
-    document.getElementById('validatedCount').textContent = stats.validated;
-    document.getElementById('failedCount').textContent = stats.failed;
-    document.getElementById('pendingCount').textContent = stats.total - stats.completed;
-    document.getElementById('validatingCount').textContent = stats.total - stats.completed;
+    try {
+        document.getElementById('validationProgress').textContent = `${stats.completed}/${stats.total}`;
+        document.getElementById('validationProgressBar').style.width = `${(stats.completed/stats.total)*100}%`;
+        document.getElementById('validatedCount').textContent = stats.validated;
+        document.getElementById('failedCount').textContent = stats.failed;
+        document.getElementById('pendingCount').textContent = stats.total - stats.completed;
+        document.getElementById('validatingCount').textContent = stats.total - stats.completed;
+    } catch (error) {
+        console.error('Error updating validation stats:', error);
+        console.error('Stats received:', stats);
+    }
 }
 
 function saveServers() {

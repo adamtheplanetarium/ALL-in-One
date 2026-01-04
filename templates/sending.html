@@ -2211,6 +2211,12 @@ function startRecheckCampaign() {
         if (data.success) {
             console.log('🎬 Showing progress modal...');
             
+            // Initialize pending count with total from emails
+            if (data.total_froms) {
+                document.getElementById('recheckPendingCount').textContent = data.total_froms;
+                console.log(`📊 Initialized pending count to ${data.total_froms}`);
+            }
+            
             // Get modal element
             const modalElement = document.getElementById('recheckProgressModal');
             if (!modalElement) {
@@ -2235,11 +2241,11 @@ function startRecheckCampaign() {
             
             console.log('🔄 Resetting UI elements...');
             
-            // Reset UI
+            // Reset UI (pending count already set from total_froms above)
             document.getElementById('recheckSendingProgress').style.width = '0%';
             document.getElementById('recheckSendingText').textContent = '0/0 (0%)';
             document.getElementById('recheckWorkingCount').textContent = '0';
-            document.getElementById('recheckPendingCount').textContent = '0';
+            // Don't reset pending count here - it's set from data.total_froms above
             document.getElementById('recheckFailedCount').textContent = '0';
             document.getElementById('recheckBatchCountdown').textContent = '0'; // Confirmed working count
             document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
@@ -2247,8 +2253,7 @@ function startRecheckCampaign() {
             recheckWorkingEmails.clear(); // Clear working set
             
             document.getElementById('recheckPhase2').style.display = 'none';
-            document.getElementById('recheckPendingCount').textContent = '0';
-            document.getElementById('recheckFailedCount').textContent = '0';
+            // Pending and failed already reset above
             document.getElementById('recheckActivityLog').innerHTML = '<div class="text-muted">Starting campaign...</div>';
             document.getElementById('stopRecheckBtn').style.display = 'inline-block';
             document.getElementById('viewResultsBtn').style.display = 'none';
