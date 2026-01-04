@@ -324,6 +324,49 @@
                         
                         <div id="recheckAlertContainer"></div>
                         
+                        <!-- Last Recheck Results Summary -->
+                        <div id="recheckResultsSummary" style="display: none;" class="mb-4">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0"><i class="bi bi-check-circle-fill"></i> Last Recheck Results</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center mb-3">
+                                        <div class="col-md-3">
+                                            <div class="card bg-light">
+                                                <div class="card-body py-2">
+                                                    <h4 class="mb-0 text-primary" id="summaryTotalCount">0</h4>
+                                                    <small class="text-muted">Total Tested</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="card bg-success text-white">
+                                                <div class="card-body py-2">
+                                                    <h4 class="mb-0" id="summaryWorkingCount">0</h4>
+                                                    <small>✅ Working</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="card bg-danger text-white">
+                                                <div class="card-body py-2">
+                                                    <h4 class="mb-0" id="summaryFailedCount">0</h4>
+                                                    <small>❌ Failed</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <button class="btn btn-primary w-100 h-100" onclick="viewRecheckResults()">
+                                                <i class="bi bi-eye-fill"></i> View Full Results
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p class="mb-0 text-muted small" id="summaryText">No recent recheck results available</p>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <!-- Configuration Form -->
                         <div class="row mb-4">
                             <div class="col-md-4 mb-3">
@@ -808,7 +851,12 @@ function setupTabLazyLoading() {
                     console.log('💾 Using cached inactive froms');
                 }
             } else if (tabId === '#recheck-froms-tab-pane') {
-                console.log('🔍 Recheck tab (config already loaded)');
+                if (!tabsLoaded['recheck']) {
+                    loadRecheckTab();
+                    tabsLoaded['recheck'] = true;
+                } else {
+                    console.log('💾 Using cached recheck results');
+                }
             } else if (tabId === '#recipients-tab-pane') {
                 if (!tabsLoaded['recipients']) {
                     loadRecipientsTab();
@@ -874,6 +922,48 @@ function loadRecipientsTab() {
     loadSendingRecipients().then(() => {
         logPerformance('Load recipients', start);
     });
+}
+
+// Load recheck tab data only
+function loadRecheckTab() {
+    const start = performance.now();
+    console.log('📥 Loading recheck results...');
+    
+    // Try to load existing results from backend
+    fetch('/api/recheck/results')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.results) {
+                const working = data.results.working || [];
+                const failed = data.results.failed || [];
+                const total = working.length + failed.length;
+                
+                if (total > 0) {
+                    console.log(`📊 Found ${total} recheck results (${working.length} working, ${failed.length} failed)`);
+                    recheckResults = data.results;
+                    
+                    // Show and update summary in tab
+                    document.getElementById('recheckResultsSummary').style.display = 'block';
+                    document.getElementById('summaryTotalCount').textContent = total;
+                    document.getElementById('summaryWorkingCount').textContent = working.length;
+                    document.getElementById('summaryFailedCount').textContent = failed.length;
+                    document.getElementById('summaryText').textContent = 
+                        `Tested ${total} from addresses: ${working.length} working, ${failed.length} failed`;
+                } else {
+                    console.log('💤 No recheck results available yet');
+                    document.getElementById('recheckResultsSummary').style.display = 'none';
+                }
+            } else {
+                console.log('💤 No recheck results available yet');
+                document.getElementById('recheckResultsSummary').style.display = 'none';
+            }
+            logPerformance('Load recheck results', start);
+        })
+        .catch(err => {
+            console.error('❌ Error loading recheck results:', err);
+            document.getElementById('recheckResultsSummary').style.display = 'none';
+            logPerformance('Load recheck results (error)', start);
+        });
 }
 
 // Socket.IO listeners (check if socket is available from base.html)
