@@ -1600,13 +1600,21 @@ def swap_recheck_results():
         # Get working emails from recheck results (these will become active)
         campaign_data = load_recheck_active()
         if not campaign_data:
-            return jsonify({'success': False, 'message': 'No recheck results found'}), 400
+            print("❌ No recheck campaign data file found")
+            return jsonify({'success': False, 'message': 'No recheck campaign data found. Please complete a recheck first.'}), 400
         
         froms_tested = campaign_data.get('froms_tested', {})
+        if not froms_tested:
+            print("❌ No froms_tested data in campaign")
+            return jsonify({'success': False, 'message': 'No test data found in campaign'}), 400
+        
         working_emails = [email for email, data in froms_tested.items() if data.get('status') == 'working']
         
+        print(f"📊 Found {len(working_emails)} working emails in campaign data")
+        print(f"📊 Working emails: {working_emails[:5]}...")  # Log first 5
+        
         if not working_emails:
-            return jsonify({'success': False, 'message': 'No working emails found in results'}), 400
+            return jsonify({'success': False, 'message': f'No working emails found in results. Campaign tested {len(froms_tested)} emails but none responded.'}), 400
         
         # Step 1: Move ALL old active emails to inactive
         moved_to_inactive = 0
