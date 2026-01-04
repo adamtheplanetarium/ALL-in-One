@@ -740,63 +740,170 @@ let monitoredFroms = {};
 let sendingCampaignRunning = false;
 let bulkRecipientsModal;
 let campaignStartModal;
+let tabsLoaded = {}; // Track which tabs have been loaded
 
-// Initialize
+// Performance logging utility
+function logPerformance(operation, startTime) {
+    const duration = (performance.now() - startTime).toFixed(2);
+    console.log(`⏱️ ${operation} took ${duration}ms`);
+    return duration;
+}
+
+// Initialize - MINIMAL loading on page load
 document.addEventListener('DOMContentLoaded', function() {
+    const initStart = performance.now();
+    console.log('🚀 Initializing Sending page...');
+    
     bulkRecipientsModal = new bootstrap.Modal(document.getElementById('bulkRecipientsModal'));
     campaignStartModal = new bootstrap.Modal(document.getElementById('campaignStartModal'));
-    loadMonitoredFroms();
-    loadSendingRecipients();
-    checkSendingStatus();
-    loadRecheckConfig(); // Load saved recheck configuration
     
-    // Periodic updates - ONLY when page is visible
-    let refreshInterval = setInterval(function() {
-        if (!document.hidden) {
-            loadMonitoredFroms();
-        }
-    }, 30000); // Every 30 seconds
+    // DON'T load data on page load - wait for user interaction
+    console.log('✅ Page initialized (no data loaded yet)');
+    logPerformance('Page initialization', initStart);
     
-    let statusInterval = setInterval(function() {
-        if (!document.hidden) {
-            checkSendingStatus();
-        }
-    }, 5000); // Every 5 seconds
+    // Load recheck config silently (lightweight)
+    loadRecheckConfig();
     
-    // Stop intervals when leaving page
-    window.addEventListener('beforeunload', function() {
-        clearInterval(refreshInterval);
-        clearInterval(statusInterval);
-    });
+    // Setup tab change listeners for lazy loading
+    setupTabLazyLoading();
+    
+    // NO automatic intervals - only load when user views a tab
 });
+
+// Setup lazy loading on tab clicks
+function setupTabLazyLoading() {
+    console.log('📑 Setting up lazy tab loading...');
+    
+    // Listen for tab changes
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const tabId = e.target.getAttribute('data-bs-target');
+            const tabName = e.target.textContent.trim();
+            
+            console.log(`👆 Tab clicked: ${tabName} (${tabId})`);
+            const tabStart = performance.now();
+            
+            // Load data for specific tab ONLY when clicked
+            if (tabId === '#settings-tab-pane') {
+                // Settings tab - already loaded
+                console.log('⚙️ Settings tab (static, no data needed)');
+            } else if (tabId === '#active-froms-tab-pane') {
+                if (!tabsLoaded['active']) {
+                    loadActiveFromsTab();
+                    tabsLoaded['active'] = true;
+                } else {
+                    console.log('💾 Using cached active froms');
+                }
+            } else if (tabId === '#inactive-froms-tab-pane') {
+                if (!tabsLoaded['inactive']) {
+                    loadInactiveFromsTab();
+                    tabsLoaded['inactive'] = true;
+                } else {
+                    console.log('💾 Using cached inactive froms');
+                }
+            } else if (tabId === '#recheck-froms-tab-pane') {
+                console.log('🔍 Recheck tab (config already loaded)');
+            } else if (tabId === '#recipients-tab-pane') {
+                if (!tabsLoaded['recipients']) {
+                    loadRecipientsTab();
+                    tabsLoaded['recipients'] = true;
+                } else {
+                    console.log('💾 Using cached recipients');
+                }
+            } else if (tabId === '#console-tab-pane') {
+                console.log('📋 Console tab (static)');
+            }
+            
+            logPerformance(`Tab switch to ${tabName}`, tabStart);
+        });
+    });
+}
+
+// Load active froms tab data only
+function loadActiveFromsTab() {
+    const start = performance.now();
+    console.log('📥 Loading active froms...');
+    
+    // Show loading on count only
+    document.getElementById('activeFromsCount').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    loadMonitoredFroms().then(() => {
+        logPerformance('Load active froms', start);
+    });
+}
+
+// Load inactive froms tab data only
+function loadInactiveFromsTab() {
+    const start = performance.now();
+    console.log('📥 Loading inactive froms...');
+    
+    // Show loading on count only
+    document.getElementById('inactiveFromsCount').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    loadMonitoredFroms().then(() => {
+        logPerformance('Load inactive froms', start);
+    });
+}
+
+// Load recipients tab data only
+function loadRecipientsTab() {
+    const start = performance.now();
+    console.log('📥 Loading recipients...');
+    
+    // Show loading on count only
+    document.getElementById('sendingRecipientsCount').innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    loadSendingRecipients().then(() => {
+        logPerformance('Load recipients', start);
+    });
+}
 
 // Socket.IO listeners (check if socket is available from base.html)
 if (typeof socket !== 'undefined') {
+    console.log('🔌 Socket.IO available - setting up listeners');
+    
     // Socket.IO listener for new monitored emails
     socket.on('new_monitored_email', function(data) {
+        console.log('📧 Socket: New email detected:', data.from);
+        const start = performance.now();
+        
         addToSendingConsole(`[NEW EMAIL] ${data.from} received in ${data.account}`, 'info');
-        showNotification('New Email Monitored', `From: ${data.from}`);
-        loadMonitoredFroms(); // Refresh data
+        
+        // Only reload if active/inactive tabs are visible
+        const activeTab = document.querySelector('#active-froms-tab-pane.active, #inactive-froms-tab-pane.active');
+        if (activeTab) {
+            console.log('🔄 Reloading froms due to new email...');
+            tabsLoaded['active'] = false;  // Invalidate cache
+            tabsLoaded['inactive'] = false;
+            loadMonitoredFroms();
+        } else {
+            console.log('💤 Skipped reload (tab not visible)');
+        }
+        
+        logPerformance('Socket new_monitored_email handler', start);
     });
 
     // Socket.IO listener for sending campaign logs
     socket.on('sending_campaign_log', function(data) {
+        console.log('📝 Socket: Campaign log:', data.message);
         addToSendingConsole(data.message, data.log_type || 'info');
     });
 
     // Socket.IO listener for sending campaign stats
     socket.on('sending_campaign_stats', function(data) {
+        console.log('📊 Socket: Campaign stats update');
         updateSendingStats(data);
     });
 
     // Socket.IO listener for sending campaign complete
     socket.on('sending_campaign_complete', function(data) {
+        console.log('✅ Socket: Campaign complete');
         addToSendingConsole(data.message, 'success');
         sendingCampaignRunning = false;
         updateSendingButtons();
     });
 } else {
-    console.warn('Socket.IO not available - real-time updates disabled');
+    console.warn('⚠️ Socket.IO not available - real-time updates disabled');
 }
 
 // Loading indicator utilities
@@ -831,33 +938,47 @@ let lastFromsLoad = 0;
 const FROMS_CACHE_TIME = 5000; // 5 seconds cache
 
 function loadMonitoredFroms() {
+    const start = performance.now();
+    
     // Throttle: Don't reload if loaded recently
     const now = Date.now();
     if (now - lastFromsLoad < FROMS_CACHE_TIME) {
-        return;
+        console.log('⚡ Skipped load (using 5s cache)');
+        return Promise.resolve();
     }
     lastFromsLoad = now;
     
-    // Show loading indicators
-    showLoadingIndicator('activeFromsList', 'Loading...');
-    showLoadingIndicator('inactiveFromsList', 'Loading...');
+    console.log('🔄 Fetching from emails from API...');
     
-    fetch('/api/monitored/froms')
-        .then(response => response.json())
+    // Show loading on BOTH counts (might be called from either tab)
+    const activeCount = document.getElementById('activeFromsCount');
+    const inactiveCount = document.getElementById('inactiveFromsCount');
+    if (activeCount) activeCount.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (inactiveCount) inactiveCount.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    return fetch('/api/monitored/froms')
+        .then(response => {
+            const fetchDuration = logPerformance('API fetch /api/monitored/froms', start);
+            return response.json();
+        })
         .then(data => {
+            const parseStart = performance.now();
             monitoredFroms = data;
             updateMonitoredCounts();
             updateActiveFromsList();
             updateInactiveFromsList();
+            logPerformance('Parse and render from emails', parseStart);
+            logPerformance('Total loadMonitoredFroms', start);
         })
         .catch(error => {
-            console.error('Error loading monitored froms:', error);
-            document.getElementById('activeFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger small">Error loading</td></tr>';
-            document.getElementById('inactiveFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger small">Error loading</td></tr>';
+            console.error('❌ Error loading monitored froms:', error);
+            if (activeCount) activeCount.textContent = '?';
+            if (inactiveCount) inactiveCount.textContent = '?';
         });
 }
 
 function updateMonitoredCounts() {
+    const start = performance.now();
     let activeCount = 0;
     let inactiveCount = 0;
     
@@ -873,11 +994,17 @@ function updateMonitoredCounts() {
     
     document.getElementById('activeFromsCount').textContent = activeCount;
     document.getElementById('inactiveFromsCount').textContent = inactiveCount;
+    
+    console.log(`📊 Counts: ${activeCount} active, ${inactiveCount} inactive`);
+    logPerformance('updateMonitoredCounts', start);
 }
 
 function updateActiveFromsList() {
+    const start = performance.now();
     const tbody = document.getElementById('activeFromsList');
     tbody.innerHTML = '';
+    
+    let count = 0;
     
     let hasActive = false;
     Object.entries(monitoredFroms).forEach(([accountName, account]) => {
@@ -898,6 +1025,7 @@ function updateActiveFromsList() {
                     </tr>
                 `;
                 tbody.innerHTML += row;
+                count++;
             }
         });
     });
@@ -905,17 +1033,23 @@ function updateActiveFromsList() {
     if (!hasActive) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted"><i class="bi bi-inbox"></i> No active from emails</td></tr>';
     }
+    
+    console.log(`📋 Rendered ${count} active froms`);
+    logPerformance('updateActiveFromsList', start);
 }
 
 function updateInactiveFromsList() {
+    const start = performance.now();
     const tbody = document.getElementById('inactiveFromsList');
     tbody.innerHTML = '';
     
     let hasInactive = false;
+    let count = 0;
     Object.entries(monitoredFroms).forEach(([accountName, account]) => {
         account.from_emails.forEach(fromEmail => {
             if (fromEmail.status === 'inactive') {
                 hasInactive = true;
+                count++;
                 const row = `
                     <tr>
                         <td><input type="checkbox" class="inactive-from-checkbox" value="${fromEmail.email}"></td>
@@ -937,9 +1071,15 @@ function updateInactiveFromsList() {
     if (!hasInactive) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted"><i class="bi bi-inbox"></i> No inactive from emails</td></tr>';
     }
+    
+    console.log(`📋 Rendered ${count} inactive froms`);
+    logPerformance('updateInactiveFromsList', start);
 }
 
 function toggleFromStatus(email, newStatus) {
+    const start = performance.now();
+    console.log(`🔄 Toggling ${email} to ${newStatus}...`);
+    
     fetch('/api/sending/toggle_from', {
         method: 'POST',
         headers: {
@@ -953,14 +1093,20 @@ function toggleFromStatus(email, newStatus) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            logPerformance('Toggle from status', start);
             showSendingAlert('success', `From email ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+            
+            // Invalidate cache and reload
+            tabsLoaded['active'] = false;
+            tabsLoaded['inactive'] = false;
             loadMonitoredFroms();
         } else {
+            console.error('❌ Toggle failed:', data);
             showSendingAlert('danger', 'Error toggling from status');
         }
     })
     .catch(error => {
-        console.error('Error:', error);
+        console.error('❌ Toggle error:', error);
         showSendingAlert('danger', 'Error toggling from status');
     });
 }
@@ -1060,6 +1206,9 @@ function clearSendingRecipients() {
 }
 
 function loadSendingRecipients() {
+    const start = performance.now();
+    console.log('🔄 Fetching recipients from API...');
+    
     // Show loading in count badges
     const countElement = document.getElementById('sendingRecipientsCount');
     const countLargeElement = document.getElementById('sendingRecipientsCountLarge');
@@ -1067,14 +1216,18 @@ function loadSendingRecipients() {
     if (countElement) countElement.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
     if (countLargeElement) countLargeElement.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
     
-    fetch('/api/sending/recipients')
-        .then(response => response.json())
+    return fetch('/api/sending/recipients')
+        .then(response => {
+            logPerformance('API fetch /api/sending/recipients', start);
+            return response.json();
+        })
         .then(data => {
             if (countElement) countElement.textContent = data.count;
             if (countLargeElement) countLargeElement.textContent = data.count;
+            logPerformance('Total loadSendingRecipients', start);
         })
         .catch(error => {
-            console.error('Error loading recipients:', error);
+            console.error('❌ Error loading recipients:', error);
             if (countElement) countElement.textContent = '?';
             if (countLargeElement) countLargeElement.textContent = '?';
         });
