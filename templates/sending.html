@@ -646,7 +646,7 @@ copermerv2026@yahoo.com</textarea>
                     <div class="col-md-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0"><i class="bi bi-check-circle-fill text-success"></i> Working Froms</h6>
-                            <button class="btn btn-sm btn-success" onclick="copyWorkingEmails(event)" title="Copy all working emails">
+                            <button class="btn btn-sm btn-success" onclick="copyWorkingEmails()" title="Copy all working emails">
                                 <i class="bi bi-clipboard"></i> Copy All
                             </button>
                         </div>
@@ -698,7 +698,7 @@ copermerv2026@yahoo.com</textarea>
                                         <i class="bi bi-lightning-fill"></i> Real-Time Captured Working Emails
                                         <span class="badge bg-light text-success ms-2" id="realTimeWorkingCount">0</span>
                                     </h6>
-                                    <button class="btn btn-sm btn-light" onclick="copyRealTimeWorking(event)">
+                                    <button class="btn btn-sm btn-light" onclick="copyRealTimeWorking()">
                                         <i class="bi bi-clipboard"></i> Copy All
                                     </button>
                                 </div>
@@ -775,10 +775,6 @@ copermerv2026@yahoo.com</textarea>
             </div>
             <div class="modal-footer">
                 <div class="me-auto">
-                    <button class="btn btn-warning btn-lg" onclick="replaceWithRealTimeWorking()" id="replaceRealTimeBtn" style="display: none;">
-                        <i class="bi bi-lightning-fill"></i> Replace with Real-Time List
-                        <small class="d-block" style="font-size: 0.75rem;">Use all captured emails (even from stopped campaign)</small>
-                    </button>
                     <button class="btn btn-primary btn-lg" onclick="replaceActiveFroms()">
                         <i class="bi bi-arrow-repeat"></i> Replace Active Froms
                         <small class="d-block" style="font-size: 0.75rem;">Move old active → inactive, new working → active</small>
@@ -2089,7 +2085,7 @@ function startRecheckCampaign() {
 }
 
 // Copy all working emails from the working log
-function copyWorkingEmails(event) {
+function copyWorkingEmails() {
     const workingLog = document.getElementById('recheckWorkingLog');
     const emails = workingLog.value.trim();
     
@@ -2121,7 +2117,7 @@ function copyWorkingEmails(event) {
 }
 
 // Copy real-time working emails from results modal
-function copyRealTimeWorking(event) {
+function copyRealTimeWorking() {
     const emails = document.getElementById('realTimeWorkingEmails').value.trim();
     
     if (!emails) {
@@ -2254,10 +2250,8 @@ function viewRecheckResults() {
                     document.getElementById('realTimeWorkingSection').style.display = 'block';
                     document.getElementById('realTimeWorkingEmails').value = realTimeEmails;
                     document.getElementById('realTimeWorkingCount').textContent = emailList.length;
-                    document.getElementById('replaceRealTimeBtn').style.display = 'inline-block';
                 } else {
                     document.getElementById('realTimeWorkingSection').style.display = 'none';
-                    document.getElementById('replaceRealTimeBtn').style.display = 'none';
                 }
                 
                 // Hide progress modal if open
@@ -2329,59 +2323,6 @@ function swapRecheckResults() {
     .catch(err => {
         console.error('Swap error:', err);
         showAlert('recheckAlertContainer', 'Network error while swapping results', 'danger');
-    });
-}
-
-// Replace active froms using real-time captured working emails
-function replaceWithRealTimeWorking() {
-    const emails = document.getElementById('realTimeWorkingEmails').value.trim();
-    
-    if (!emails) {
-        alert('No real-time working emails available');
-        return;
-    }
-    
-    const emailList = emails.split('\n').filter(e => e.trim());
-    
-    const msg = `🔄 Replace Active Froms with Real-Time List\n\n` +
-               `This will:\n` +
-               `• Move ALL old active emails → Inactive\n` +
-               `• Move ${emailList.length} captured working emails → Active\n\n` +
-               `These are emails detected during the campaign (even if stopped early).\n\n` +
-               `Continue?`;
-    
-    if (!confirm(msg)) {
-        return;
-    }
-    
-    // Create a temporary recheck results object with real-time emails
-    const tempWorkingResults = emailList.map(email => ({
-        email: email,
-        sent_at: null,
-        delivered_at: null,
-        unique_id: null
-    }));
-    
-    // Update the backend campaign data with these emails
-    fetch('/api/recheck/apply_real_time', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            working_emails: emailList
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            // Now swap
-            swapRecheckResults();
-        } else {
-            alert(data.message || 'Failed to apply real-time working emails');
-        }
-    })
-    .catch(err => {
-        console.error('Error applying real-time emails:', err);
-        alert('Network error while applying real-time emails');
     });
 }
 
@@ -2590,14 +2531,6 @@ if (typeof socket !== 'undefined') {
     });
     
     socket.on('recheck_response_detected', function(data) {
-        // Debug logging
-        console.log('🔍 Recheck response detected:', {
-            from_email: data.from_email,
-            working_count: data.working_count,
-            pending_count: data.pending_count,
-            failed_count: data.failed_count
-        });
-        
         // Update stats
         document.getElementById('recheckWorkingCount').textContent = data.working_count;
         document.getElementById('recheckPendingCount').textContent = data.pending_count;

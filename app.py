@@ -1644,49 +1644,6 @@ def get_recheck_results():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/recheck/apply_real_time', methods=['POST'])
-@login_required
-def apply_real_time_working():
-    """Apply real-time captured working emails to campaign data"""
-    try:
-        data = request.json
-        working_emails = data.get('working_emails', [])
-        
-        if not working_emails:
-            return jsonify({'success': False, 'message': 'No working emails provided'}), 400
-        
-        campaign_data = load_recheck_active()
-        if not campaign_data:
-            # Create new campaign data if none exists
-            campaign_data = {
-                'campaign_id': f"recheck_realtime_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'from_source': 'realtime',
-                'froms_tested': {},
-                'config': {}
-            }
-        
-        # Add or update working emails in froms_tested
-        import uuid
-        for email in working_emails:
-            if email.strip():
-                campaign_data['froms_tested'][email.strip()] = {
-                    'status': 'working',
-                    'unique_id': f"RECHECK_{uuid.uuid4().hex[:12]}",
-                    'sent_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'delivered_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'source': 'realtime'
-                }
-        
-        save_recheck_active(campaign_data)
-        
-        return jsonify({
-            'success': True,
-            'count': len(working_emails)
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/api/recheck/apply_results', methods=['POST'])
 @login_required
 def apply_recheck_results():
