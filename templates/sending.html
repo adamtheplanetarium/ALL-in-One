@@ -748,10 +748,26 @@ document.addEventListener('DOMContentLoaded', function() {
     loadMonitoredFroms();
     loadSendingRecipients();
     checkSendingStatus();
+    loadRecheckConfig(); // Load saved recheck configuration
     
-    // Periodic updates
-    setInterval(loadMonitoredFroms, 30000); // Every 30 seconds
-    setInterval(checkSendingStatus, 5000); // Every 5 seconds
+    // Periodic updates - ONLY when page is visible
+    let refreshInterval = setInterval(function() {
+        if (!document.hidden) {
+            loadMonitoredFroms();
+        }
+    }, 30000); // Every 30 seconds
+    
+    let statusInterval = setInterval(function() {
+        if (!document.hidden) {
+            checkSendingStatus();
+        }
+    }, 5000); // Every 5 seconds
+    
+    // Stop intervals when leaving page
+    window.addEventListener('beforeunload', function() {
+        clearInterval(refreshInterval);
+        clearInterval(statusInterval);
+    });
 });
 
 // Socket.IO listeners (check if socket is available from base.html)
@@ -790,10 +806,10 @@ function showLoadingIndicator(elementId, message = 'Loading...') {
         element.innerHTML = `
             <tr>
                 <td colspan="5" class="text-center py-4">
-                    <div class="spinner-border text-primary mb-2" role="status">
+                    <div class="spinner-border spinner-border-sm text-primary mb-2" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <div class="text-muted">${message}</div>
+                    <div class="text-muted small">${message}</div>
                 </td>
             </tr>
         `;
@@ -804,19 +820,27 @@ function showLoadingSpinner(elementId) {
     const element = document.getElementById(elementId);
     if (element) {
         element.innerHTML = `
-            <div class="text-center py-3">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
+            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
             </div>
         `;
     }
 }
 
+let lastFromsLoad = 0;
+const FROMS_CACHE_TIME = 5000; // 5 seconds cache
+
 function loadMonitoredFroms() {
+    // Throttle: Don't reload if loaded recently
+    const now = Date.now();
+    if (now - lastFromsLoad < FROMS_CACHE_TIME) {
+        return;
+    }
+    lastFromsLoad = now;
+    
     // Show loading indicators
-    showLoadingIndicator('activeFromsList', 'Loading active from emails...');
-    showLoadingIndicator('inactiveFromsList', 'Loading inactive from emails...');
+    showLoadingIndicator('activeFromsList', 'Loading...');
+    showLoadingIndicator('inactiveFromsList', 'Loading...');
     
     fetch('/api/monitored/froms')
         .then(response => response.json())
@@ -828,8 +852,8 @@ function loadMonitoredFroms() {
         })
         .catch(error => {
             console.error('Error loading monitored froms:', error);
-            document.getElementById('activeFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
-            document.getElementById('inactiveFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
+            document.getElementById('activeFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger small">Error loading</td></tr>';
+            document.getElementById('inactiveFromsList').innerHTML = '<tr><td colspan="5" class="text-center text-danger small">Error loading</td></tr>';
         });
 }
 
@@ -1521,6 +1545,42 @@ let recheckCountdownInterval;
 let recheckResults = { working: [], failed: [], pending: [] };
 let recheckWorkingEmails = new Set(); // Track working emails
 
+// Load recheck configuration from backend
+function loadRecheckConfig() {
+    fetch('/api/recheck/get_config')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.config) {
+                const config = data.config;
+                
+                // Populate form fields
+                if (config.from_source) {
+                    document.getElementById('recheckFromSource').value = config.from_source;
+                }
+                if (config.threads) {
+                    document.getElementById('recheckThreads').value = config.threads;
+                }
+                if (config.sender_name) {
+                    document.getElementById('recheckSenderName').value = config.sender_name;
+                }
+                if (config.subject) {
+                    document.getElementById('recheckSubject').value = config.subject;
+                }
+                if (config.recipients && config.recipients.length > 0) {
+                    document.getElementById('recheckRecipients').value = config.recipients.join('\n');
+                }
+                if (config.message) {
+                    document.getElementById('recheckMessage').value = config.message;
+                }
+                
+                console.log('✅ Loaded recheck config:', config.threads, 'threads');
+            }
+        })
+        .catch(err => {
+            console.error('Error loading recheck config:', err);
+        });
+}
+
 // Save recheck configuration
 function saveRecheckConfig() {
     const threads = parseInt(document.getElementById('recheckThreads').value) || 3;
@@ -1541,7 +1601,7 @@ function saveRecheckConfig() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showAlert('recheckAlertContainer', 'Configuration saved successfully!', 'success');
+            showAlert('recheckAlertContainer', `Configuration saved successfully! (${data.threads_saved} threads)`, 'success');
         } else {
             showAlert('recheckAlertContainer', data.message || 'Failed to save configuration', 'danger');
         }

@@ -1376,6 +1376,37 @@ def save_recheck_configuration():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/recheck/get_config', methods=['GET'])
+@login_required
+def get_recheck_configuration():
+    """Get saved recheck configuration"""
+    try:
+        config = load_recheck_config()
+        if not config:
+            # Return default config with test recipients
+            config = {
+                'from_source': 'active',
+                'threads': 3,
+                'sender_name': 'Verification System',
+                'subject': 'Verification {unique_id}',
+                'recipients': [
+                    'Footmen203@yahoo.com',
+                    'Footmen404@yahoo.com',
+                    'azoofoo2026@yahoo.com',
+                    'azoofozora2026@yahoo.com',
+                    'brb4mints@yahoo.com',
+                    'atombrid2069@yahoo.com',
+                    'micoland2026@yahoo.com',
+                    'bravoeco2026@yahoo.com',
+                    'laststand2026@yahoo.com',
+                    'copermerv2026@yahoo.com'
+                ],
+                'message': ''
+            }
+        return jsonify({'success': True, 'config': config})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/recheck/remove_duplicates', methods=['POST'])
 @login_required
 def remove_from_duplicates():
