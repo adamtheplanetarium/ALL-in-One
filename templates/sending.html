@@ -2402,13 +2402,13 @@ function applyBulkStatusChange(emails, status) {
 // Socket.IO listeners for recheck events
 if (typeof socket !== 'undefined') {
     socket.on('recheck_progress', function(data) {
-        // Update progress bar
+        // Update progress bar only (Phase 1: Sending)
         const percent = (data.sent / data.total * 100).toFixed(0);
         document.getElementById('recheckSendingProgress').style.width = percent + '%';
         document.getElementById('recheckSendingText').textContent = `${data.sent}/${data.total} (${percent}%)`;
         
-        // Update pending count
-        document.getElementById('recheckPendingCount').textContent = data.total - data.sent;
+        // Note: Pending count is updated by recheck_response_detected (Phase 2: Responses)
+        // Don't update here as it would overwrite actual response counts
     });
     
     socket.on('recheck_log', function(data) {
