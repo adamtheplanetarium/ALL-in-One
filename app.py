@@ -39,6 +39,9 @@ monitored_data = {
 }
 monitored_lock = threading.Lock()
 
+# Recheck campaign lock for thread-safe counter updates
+recheck_lock = threading.Lock()
+
 # File to store active/inactive status for monitored from emails
 from_status_file = os.path.join('Basic', 'sending_from_status.json')
 
@@ -1043,31 +1046,41 @@ def new_email():
                         for test_email, test_data in froms_tested.items():
                             test_unique_id = test_data.get('unique_id', '')
                             if test_unique_id == unique_id:
-                                # Only mark as working if not already marked (prevent duplicates)
-                                if test_data.get('status') != 'working':
-                                    test_data['status'] = 'working'
-                                    test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                                    test_data['response_from'] = from_email  # Track what email responded
-                                    campaign_data['froms_tested'][test_email] = test_data
-                                    save_recheck_active(campaign_data)
+                                # Thread-safe counter update
+                                with recheck_lock:
+                                    # Reload campaign data inside lock to get latest state
+                                    campaign_data = load_recheck_active()
+                                    if not campaign_data:
+                                        break
                                     
-                                    # Count stats from UPDATED froms_tested dictionary
-                                    updated_froms = campaign_data.get('froms_tested', {})
-                                    working = sum(1 for d in updated_froms.values() if d.get('status') == 'working')
-                                    failed = sum(1 for d in updated_froms.values() if d.get('status') == 'failed')
-                                    pending = sum(1 for d in updated_froms.values() if d.get('status') == 'pending')
+                                    froms_tested = campaign_data.get('froms_tested', {})
+                                    test_data = froms_tested.get(test_email, {})
                                     
-                                    # Emit Socket.IO event
-                                    if recheck_campaign_callback:
-                                        recheck_campaign_callback({
-                                            'type': 'recheck_response_detected',
-                                            'from_email': test_email,
-                                            'working_count': working,
-                                            'pending_count': pending,
-                                            'failed_count': failed
-                                        })
-                                    
-                                    print(f"✅ Recheck response detected: {test_email} (responded from {from_email}) - Total working: {working}")
+                                    # Only mark as working if not already marked (prevent duplicates)
+                                    if test_data.get('status') != 'working':
+                                        test_data['status'] = 'working'
+                                        test_data['delivered_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                        test_data['response_from'] = from_email  # Track what email responded
+                                        campaign_data['froms_tested'][test_email] = test_data
+                                        save_recheck_active(campaign_data)
+                                        
+                                        # Count stats from UPDATED froms_tested dictionary
+                                        updated_froms = campaign_data.get('froms_tested', {})
+                                        working = sum(1 for d in updated_froms.values() if d.get('status') == 'working')
+                                        failed = sum(1 for d in updated_froms.values() if d.get('status') == 'failed')
+                                        pending = sum(1 for d in updated_froms.values() if d.get('status') == 'pending')
+                                        
+                                        # Emit Socket.IO event
+                                        if recheck_campaign_callback:
+                                            recheck_campaign_callback({
+                                                'type': 'recheck_response_detected',
+                                                'from_email': test_email,
+                                                'working_count': working,
+                                                'pending_count': pending,
+                                                'failed_count': failed
+                                            })
+                                        
+                                        print(f"✅ Recheck response detected: {test_email} (responded from {from_email}) - Total working: {working}")
                                 break
                 except Exception as e:
                     print(f"Error processing recheck response: {e}")
@@ -1608,13 +1621,26 @@ def swap_recheck_results():
             print("❌ No froms_tested data in campaign")
             return jsonify({'success': False, 'message': 'No test data found in campaign'}), 400
         
+        # Count all statuses for debugging
+        all_statuses = {}
+        for email, data in froms_tested.items():
+            status = data.get('status', 'unknown')
+            all_statuses[status] = all_statuses.get(status, 0) + 1
+        
+        print(f"📊 Campaign status breakdown: {all_statuses}")
+        print(f"📊 Total tested: {len(froms_tested)}")
+        
         working_emails = [email for email, data in froms_tested.items() if data.get('status') == 'working']
         
         print(f"📊 Found {len(working_emails)} working emails in campaign data")
-        print(f"📊 Working emails: {working_emails[:5]}...")  # Log first 5
+        if working_emails:
+            print(f"📊 First 5 working emails: {working_emails[:5]}")
         
         if not working_emails:
-            return jsonify({'success': False, 'message': f'No working emails found in results. Campaign tested {len(froms_tested)} emails but none responded.'}), 400
+            return jsonify({
+                'success': False, 
+                'message': f'No working emails found in results. Campaign tested {len(froms_tested)} emails. Status breakdown: {all_statuses}'
+            }), 400
         
         # Step 1: Move ALL old active emails to inactive
         moved_to_inactive = 0
