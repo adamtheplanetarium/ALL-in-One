@@ -16,7 +16,7 @@ IMAP_SERVER = "Imap0001.neo.space"
 IMAP_PORT = 993
 IMAP_PASSWORD = "Venom@2025"
 SMTP_TIMEOUT = 30
-MAX_WORKERS = 10
+MAX_WORKERS = 5  # REDUCED from 10 to 5 to prevent system overload and crashes
 WAIT_TIME = 300  # 5 minutes
 
 tracking_lock = threading.Lock()

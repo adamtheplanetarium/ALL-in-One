@@ -65,11 +65,24 @@
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     {% if 'logged_in' in session %}
     <script>
-        // Check campaign status periodically
+        // Check campaign status periodically with error resilience
+        let statusCheckFailures = 0;
+        const MAX_STATUS_CHECK_FAILURES = 3;
+        let statusCheckInterval = null;
+        
         function updateCampaignStatusBadge() {
-            fetch('/api/campaign/status')
-                .then(res => res.json())
+            // Use AbortController for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+            
+            fetch('/api/campaign/status', { signal: controller.signal })
+                .then(res => {
+                    clearTimeout(timeoutId);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
                 .then(data => {
+                    statusCheckFailures = 0; // Reset on success
                     const badge = document.getElementById('campaignStatusBadge');
                     const statusText = document.getElementById('campaignStatusText');
                     const spinner = badge.querySelector('.spinner-grow');
@@ -89,19 +102,34 @@
                     }
                 })
                 .catch(err => {
-                    console.error('Error checking campaign status:', err);
+                    clearTimeout(timeoutId);
+                    statusCheckFailures++;
+                    
+                    // Only log first 3 errors to avoid console spam
+                    if (statusCheckFailures <= MAX_STATUS_CHECK_FAILURES) {
+                        console.warn(`⚠️ Campaign status check failed (${statusCheckFailures}/${MAX_STATUS_CHECK_FAILURES}):`, err.message);
+                    }
+                    
+                    // Stop polling after too many failures to prevent crash
+                    if (statusCheckFailures >= MAX_STATUS_CHECK_FAILURES && statusCheckInterval) {
+                        console.warn('❌ Too many status check failures - stopping polling to prevent system crash');
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+                    }
                 });
         }
         
-        // Update status on page load
+        // Update status on page load with delay to ensure page is ready
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', updateCampaignStatusBadge);
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(updateCampaignStatusBadge, 500); // Delay initial check
+            });
         } else {
-            updateCampaignStatusBadge();
+            setTimeout(updateCampaignStatusBadge, 500);
         }
         
-        // Update status every 5 seconds
-        setInterval(updateCampaignStatusBadge, 5000);
+        // Update status every 10 seconds (reduced from 5s to prevent overload)
+        statusCheckInterval = setInterval(updateCampaignStatusBadge, 10000);
     </script>
     {% endif %}
     {% block extra_js %}{% endblock %}

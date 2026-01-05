@@ -213,12 +213,43 @@ let socket;
 let servers = [];
 let currentFilter = 'all';
 let isValidating = false; // Track validation state
+let socketInitAttempts = 0;
+const MAX_SOCKET_INIT_ATTEMPTS = 5;
 
-// Initialize Socket.IO when available
+// Initialize Socket.IO when available (with crash prevention)
 function initSocket() {
+    socketInitAttempts++;
+    
+    if (socketInitAttempts > MAX_SOCKET_INIT_ATTEMPTS) {
+        console.warn('❌ Max Socket.IO init attempts reached - stopping to prevent freeze');
+        return;
+    }
+    
     if (typeof io !== 'undefined') {
-        socket = io();
+        // Use global socket if available, otherwise create new one
+        if (window.socket && window.socket.connected) {
+            console.log('✅ Using existing Socket.IO connection');
+            socket = window.socket;
+        } else if (!socket || !socket.connected) {
+            console.log('🔌 Initializing SMTP page Socket.IO connection...');
+            socket = io({
+                transports: ['polling'],  // Use ONLY polling to prevent WebSocket crashes
+                reconnection: true,
+                reconnectionAttempts: 5,  // Limit attempts
+                timeout: 20000,
+                autoConnect: true
+            });
+            
+            socket.on('connect', function() {
+                console.log('✅ SMTP Socket.IO connected');
+            });
+            
+            socket.on('connect_error', function(error) {
+                console.warn('⚠️ SMTP Socket connection error:', error.message);
+            });
+        }
         
+        // Register event handlers
         socket.on('validation_log', function(data) {
             addValidationLog(data.message);
         });
@@ -236,7 +267,9 @@ function initSocket() {
             }, 2000);
         });
     } else {
-        setTimeout(initSocket, 100); // Retry after 100ms
+        if (socketInitAttempts <= MAX_SOCKET_INIT_ATTEMPTS) {
+            setTimeout(initSocket, 200); // Retry after 200ms (increased from 100ms)
+        }
     }
 }
 

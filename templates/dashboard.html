@@ -110,24 +110,47 @@
 </div>
 
 <script>
-const socket = io();
+// Use global socket with crash prevention
+let socket;
 
-socket.on('connect', function() {
-    console.log('Connected to server');
-});
+function initDashboardSocket() {
+    if (window.socket && window.socket.connected) {
+        console.log('✅ Dashboard using existing global Socket.IO connection');
+        socket = window.socket;
+    } else if (typeof io !== 'undefined') {
+        console.log('🔌 Initializing Dashboard Socket.IO connection...');
+        socket = io({
+            transports: ['polling'],  // Use ONLY polling to prevent WebSocket crashes
+            reconnection: true,
+            reconnectionAttempts: 5,
+            timeout: 20000,
+            autoConnect: true
+        });
+    } else {
+        console.warn('⚠️ Socket.IO not available on dashboard');
+        return;
+    }
 
-socket.on('campaign_log', function(data) {
-    addLog(data.message);
-});
+    socket.on('connect', function() {
+        console.log('✅ Dashboard Socket.IO connected');
+    });
 
-socket.on('campaign_stats', function(stats) {
-    updateStats(stats);
-});
+    socket.on('connect_error', function(error) {
+        console.warn('⚠️ Dashboard Socket connection error:', error.message);
+    });
 
-socket.on('campaign_stopped', function(stats) {
-    updateStats(stats);
-    document.getElementById('startBtn').disabled = false;
-    document.getElementById('stopBtn').disabled = true;
+    socket.on('campaign_log', function(data) {
+        addLog(data.message);
+    });
+
+    socket.on('campaign_stats', function(stats) {
+        updateStats(stats);
+    });
+
+    socket.on('campaign_stopped', function(stats) {
+        updateStats(stats);
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = true;
     showAlert('Campaign stopped successfully', 'warning');
 });
 
@@ -202,6 +225,12 @@ function addLog(message) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
+// Initialize socket when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboardSocket);
+} else {
+    initDashboardSocket();
+}
 function showAlert(message, type) {
     const alertDiv = document.getElementById('campaignAlert');
     alertDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">

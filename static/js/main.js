@@ -72,28 +72,32 @@ window.appUtils = {
     stopAutoRefresh
 };
 
-// Initialize Socket.IO connection with optimized settings for render.com
+// Initialize Socket.IO connection with crash-prevention for render.com
 try {
     if (typeof io !== 'undefined') {
         // Check if socket already exists (prevent multiple connections)
         if (window.socket && window.socket.connected) {
             console.log('✅ Socket.IO already connected - reusing existing connection');
         } else {
+            // Track reconnection attempts to prevent infinite loops
+            let reconnectAttempts = 0;
+            const MAX_RECONNECT_ATTEMPTS = 10;
+            let isIntentionalDisconnect = false;
+            
             window.socket = io({
                 transports: ['polling', 'websocket'],  // Start with polling for better compatibility
                 reconnection: true,
-                reconnectionDelay: 2000,
-                reconnectionDelayMax: 10000,
-                reconnectionAttempts: Infinity,
-                timeout: 60000,  // Increased from 20s to 60s for render.com
-                pingTimeout: 60000,  // Time to wait for pong response (60s for render.com)
-                pingInterval: 25000,  // How often to send ping (25s)
+                reconnectionDelay: 3000,              // Increased from 2s to 3s
+                reconnectionDelayMax: 15000,          // Increased from 10s to 15s
+                reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,  // Limit attempts to prevent crashes
+                timeout: 30000,                        // Reduced from 60s to 30s for faster failure detection
+                pingTimeout: 30000,                    // Reduced from 60s to 30s
+                pingInterval: 25000,                   // Keep at 25s
                 autoConnect: true,
                 forceNew: false,
                 multiplex: true,
-                upgrade: true,
-                rememberUpgrade: true,
-                // Additional render.com-specific settings
+                upgrade: false,                        // DISABLE auto-upgrade to prevent WebSocket crashes
+                rememberUpgrade: false,                // Don't remember WebSocket upgrades
                 path: '/socket.io/',
                 secure: true,
                 rejectUnauthorized: false
@@ -101,37 +105,80 @@ try {
         }
         
         socket.on('connect', function() {
+            reconnectAttempts = 0; // Reset on successful connection
             console.log('✅ Socket.IO connected (transport:', socket.io.engine.transport.name, ')');
         });
         
         socket.on('disconnect', function(reason) {
+            // Don't try to reconnect if we're intentionally disconnecting
+            if (isIntentionalDisconnect) {
+                return;
+            }
+            
+            console.log('⚠️ Socket.IO disconnected:', reason);
+            
+            // If server disconnected, try to reconnect ONCE
             if (reason === 'io server disconnect') {
-                // Server disconnected, reconnect manually
-                console.log('⚠️ Server disconnected - reconnecting...');
-                socket.connect();
-            } else {
-                console.log('⚠️ Socket.IO disconnected:', reason);
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    console.log('🔄 Server disconnected - attempting reconnection...');
+                    setTimeout(() => {
+                        socket.connect();
+                    }, 5000); // Wait 5 seconds before reconnecting
+                } else {
+                    console.warn('❌ Max reconnection attempts reached - stopping to prevent crash');
+                }
             }
         });
         
         socket.on('connect_error', function(error) {
-            console.error('❌ Socket.IO connection error:', error.message);
-            console.log('💡 Falling back to polling transport...');
+            reconnectAttempts++;
+            
+            // Only log every 3rd error to reduce console spam
+            if (reconnectAttempts % 3 === 0) {
+                console.warn(`⚠️ Socket.IO connection error (attempt ${reconnectAttempts}):`, error.message);
+            }
+            
+            // Stop trying after max attempts
+            if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                console.error('❌ Max connection attempts reached - disconnecting to prevent system freeze');
+                isIntentionalDisconnect = true;
+                socket.disconnect();
+                
+                // Show user-friendly message
+                const msg = document.createElement('div');
+                msg.className = 'alert alert-warning position-fixed top-0 start-50 translate-middle-x mt-3';
+                msg.style.zIndex = '9999';
+                msg.innerHTML = '⚠️ Real-time connection unavailable. Page will still work but updates may be delayed. <button class="btn-close" onclick="this.parentElement.remove()"></button>';
+                document.body.appendChild(msg);
+            }
         });
         
         socket.on('reconnect', function(attemptNumber) {
+            reconnectAttempts = 0; // Reset on successful reconnect
             console.log('🔄 Socket.IO reconnected after', attemptNumber, 'attempts');
         });
         
         socket.on('reconnect_attempt', function(attemptNumber) {
+            // Only log every 5th attempt to reduce spam
             if (attemptNumber % 5 === 0) {
                 console.log('🔄 Reconnection attempt:', attemptNumber);
             }
         });
         
-        // Log transport upgrade
-        socket.io.on('upgrade', function(transport) {
-            console.log('⬆️ Transport upgraded to:', transport.name);
+        socket.on('reconnect_failed', function() {
+            console.error('❌ Socket.IO reconnection failed - giving up to prevent crash');
+            isIntentionalDisconnect = true;
+        });
+        
+        // REMOVE transport upgrade listener to prevent WebSocket crashes
+        // socket.io.on('upgrade', ...) - REMOVED
+        
+        // Handle page unload gracefully
+        window.addEventListener('beforeunload', function() {
+            isIntentionalDisconnect = true;
+            if (socket && socket.connected) {
+                socket.disconnect();
+            }
         });
     } else {
         console.warn('Socket.IO library not loaded');
