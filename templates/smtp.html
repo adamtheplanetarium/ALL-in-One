@@ -477,14 +477,25 @@ function deleteSelected() {
         return;
     }
     
-    if (confirm(`Delete ${indices.length} selected server(s)?`)) {
+    // Get the servers that will be deleted for confirmation
+    const serversToDelete = indices.map(i => servers[i]);
+    const deleteInfo = serversToDelete.map(s => `${s.username || s.email} (${s.status})`).join(', ');
+    
+    if (confirm(`Delete ${indices.length} selected server(s)?\n\n${deleteInfo.substring(0, 200)}${deleteInfo.length > 200 ? '...' : ''}`)) {
         console.log(`🗑️ Deleting ${indices.length} servers at indices:`, indices);
-        // Sort in reverse to delete from end
-        indices.sort((a, b) => b - a);
-        indices.forEach(index => {
-            console.log(`  Deleting index ${index}:`, servers[index]);
-            servers.splice(index, 1);
-        });
+        console.log('Servers to delete:', serversToDelete);
+        
+        // Create a new array WITHOUT the selected indices (more reliable than splice)
+        const indicesToDelete = new Set(indices);
+        const newServers = servers.filter((server, index) => !indicesToDelete.has(index));
+        
+        console.log(`Before delete: ${servers.length} servers`);
+        console.log(`After delete: ${newServers.length} servers`);
+        console.log(`Deleted: ${servers.length - newServers.length} servers`);
+        
+        // Replace the servers array
+        servers = newServers;
+        
         renderTable();
         updateCounts();
         showAlert(`${indices.length} server(s) deleted`, 'success');
