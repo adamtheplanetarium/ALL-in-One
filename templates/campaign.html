@@ -490,8 +490,23 @@ function loadConfig() {
                 
                 // Load with uppercase/lowercase fallbacks
                 document.getElementById('sendername').value = config.SENDERNAME || config.sendername || 'Support';
-                document.getElementById('subject').value = config.subject || config.SUBJECT || 'Important Security Alert - Action Required';
-                document.getElementById('message').value = config.MESSAGE || config.message || getDefaultTemplate();
+                
+                // Load subject - use default if subject is "hello" or empty
+                let subjectValue = config.subject || config.SUBJECT || '';
+                if (!subjectValue || subjectValue.trim() === '' || subjectValue.trim().toLowerCase() === 'hello') {
+                    subjectValue = 'Important Security Alert - Action Required';
+                    console.log('📧 Using default subject (was empty or "hello")');
+                }
+                document.getElementById('subject').value = subjectValue;
+                
+                // Load message - use default template if message is "hello" or empty
+                let messageValue = config.MESSAGE || config.message || '';
+                if (!messageValue || messageValue.trim() === '' || messageValue.trim().toLowerCase() === 'hello') {
+                    messageValue = getDefaultTemplate();
+                    console.log('📄 Using default HTML template (message was empty or "hello")');
+                }
+                document.getElementById('message').value = messageValue;
+                
                 document.getElementById('domainfrom').value = config.domainfrom || '';
                 document.getElementById('domainauth').value = config.DOMAIN_AUTHENTICATION || config.domain_authentication || '';
                 document.getElementById('sleeptime').value = config.SLEEPTIME || config.sleeptime || '1';
