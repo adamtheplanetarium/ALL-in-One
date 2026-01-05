@@ -624,12 +624,12 @@ let fromEmailsCache = null;
 let fromEmailsCacheTime = 0;
 const CACHE_DURATION = 5000; // 5 seconds
 
-function loadFromEmails() {
-    console.log('📧 Loading from emails count...');
+function loadFromEmails(forceRefresh = false) {
+    console.log('📧 Loading from emails count...', forceRefresh ? '(forced refresh)' : '');
     
-    // Use cache if available and fresh
+    // Use cache if available and fresh (unless force refresh)
     const now = Date.now();
-    if (fromEmailsCache && (now - fromEmailsCacheTime < CACHE_DURATION)) {
+    if (!forceRefresh && fromEmailsCache !== null && (now - fromEmailsCacheTime < CACHE_DURATION)) {
         console.log('✅ Using cached from emails count:', fromEmailsCache);
         document.getElementById('fromCount').textContent = fromEmailsCache;
         document.getElementById('fromCountLarge').textContent = fromEmailsCache.toLocaleString();
@@ -658,12 +658,12 @@ function loadFromEmails() {
 let recipientsCache = null;
 let recipientsCacheTime = 0;
 
-function loadRecipients() {
-    console.log('👥 Loading recipients count...');
+function loadRecipients(forceRefresh = false) {
+    console.log('👥 Loading recipients count...', forceRefresh ? '(forced refresh)' : '');
     
-    // Use cache if available and fresh
+    // Use cache if available and fresh (unless force refresh)
     const now = Date.now();
-    if (recipientsCache && (now - recipientsCacheTime < CACHE_DURATION)) {
+    if (!forceRefresh && recipientsCache !== null && (now - recipientsCacheTime < CACHE_DURATION)) {
         console.log('✅ Using cached recipients count:', recipientsCache);
         document.getElementById('recipientCount').textContent = recipientsCache;
         document.getElementById('recipientCountLarge').textContent = recipientsCache.toLocaleString();
@@ -1073,11 +1073,11 @@ async function startFileUpload() {
     `;
     document.getElementById('uploadSuccessAlert').classList.remove('d-none');
     
-    // Refresh count with a small delay to ensure backend has written the file
-    // Also add cache-busting parameter to force fresh data
+    // Refresh count with force refresh to bypass cache
+    console.log('🔄 Forcing count refresh after upload...');
     setTimeout(() => {
-        loadFromEmails();
-    }, 500);
+        loadFromEmails(true); // Force refresh = true
+    }, 1000); // Increased delay to 1 second to ensure file is fully written
     
     // Re-enable close button
     document.getElementById('fileUploadCloseBtn').disabled = false;
