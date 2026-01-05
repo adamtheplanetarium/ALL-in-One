@@ -42,6 +42,10 @@ monitored_lock = threading.Lock()
 # Recheck campaign lock for thread-safe counter updates
 recheck_lock = threading.Lock()
 
+# File lock for bulk email operations (prevents race conditions)
+from_emails_lock = threading.Lock()
+recipients_lock = threading.Lock()
+
 # File to store active/inactive status for monitored from emails
 from_status_file = os.path.join('Basic', 'sending_from_status.json')
 
@@ -611,38 +615,40 @@ def get_from_emails():
 @app.route('/api/campaign/from/bulk', methods=['POST'])
 @login_required
 def bulk_add_from_emails():
-    try:
-        data = request.get_json()
-        new_emails = data.get('emails', [])
-        
-        print(f"📥 Bulk add request: {len(new_emails)} emails")
-        
-        from_file = os.path.join(BASIC_FOLDER, 'from.txt')
-        existing_emails = []
-        
-        if os.path.exists(from_file):
-            with open(from_file, 'r') as f:
-                existing_emails = [line.strip() for line in f if line.strip()]
-            print(f"📂 Existing emails in file: {len(existing_emails)}")
-        
-        # Combine and remove duplicates
-        print(f"🔄 Combining and removing duplicates...")
-        all_emails = list(set(existing_emails + new_emails))
-        duplicates = len(existing_emails) + len(new_emails) - len(all_emails)
-        added = len(all_emails) - len(existing_emails)
-        
-        print(f"💾 Writing {len(all_emails)} emails to file...")
-        with open(from_file, 'w') as f:
-            for email in all_emails:
-                f.write(f"{email}\n")
-        
-        print(f"✅ Bulk add complete: +{added} new, {duplicates} duplicates, {len(all_emails)} total")
-        return jsonify({'success': True, 'added': added, 'duplicates': duplicates, 'total': len(all_emails)})
-    except Exception as e:
-        print(f"❌ Error in bulk_add_from_emails: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # Use lock to prevent race conditions with parallel uploads
+    with from_emails_lock:
+        try:
+            data = request.get_json()
+            new_emails = data.get('emails', [])
+            
+            print(f"📥 Bulk add request: {len(new_emails)} emails")
+            
+            from_file = os.path.join(BASIC_FOLDER, 'from.txt')
+            existing_emails = []
+            
+            if os.path.exists(from_file):
+                with open(from_file, 'r') as f:
+                    existing_emails = [line.strip() for line in f if line.strip()]
+                print(f"📂 Existing emails in file: {len(existing_emails)}")
+            
+            # Combine and remove duplicates
+            print(f"🔄 Combining and removing duplicates...")
+            all_emails = list(set(existing_emails + new_emails))
+            duplicates = len(existing_emails) + len(new_emails) - len(all_emails)
+            added = len(all_emails) - len(existing_emails)
+            
+            print(f"💾 Writing {len(all_emails)} emails to file...")
+            with open(from_file, 'w') as f:
+                for email in all_emails:
+                    f.write(f"{email}\n")
+            
+            print(f"✅ Bulk add complete: +{added} new, {duplicates} duplicates, {len(all_emails)} total")
+            return jsonify({'success': True, 'added': added, 'duplicates': duplicates, 'total': len(all_emails)})
+        except Exception as e:
+            print(f"❌ Error in bulk_add_from_emails: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/campaign/from/delete', methods=['POST'])
 @login_required
@@ -694,28 +700,30 @@ def get_recipients():
 @app.route('/api/campaign/recipients/bulk', methods=['POST'])
 @login_required
 def bulk_add_recipients():
-    try:
-        data = request.get_json()
-        new_emails = data.get('emails', [])
-        
-        recipients_file = os.path.join(BASIC_FOLDER, 'emailx.txt')
-        existing_emails = []
-        
-        if os.path.exists(recipients_file):
-            with open(recipients_file, 'r') as f:
-                existing_emails = [line.strip() for line in f if line.strip()]
-        
-        # Combine and remove duplicates
-        all_emails = list(set(existing_emails + new_emails))
-        duplicates = len(existing_emails) + len(new_emails) - len(all_emails)
-        
-        with open(recipients_file, 'w') as f:
-            for email in all_emails:
-                f.write(f"{email}\n")
-        
-        return jsonify({'success': True, 'added': len(all_emails) - len(existing_emails), 'duplicates': duplicates, 'total': len(all_emails)})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # Use lock to prevent race conditions with parallel uploads
+    with recipients_lock:
+        try:
+            data = request.get_json()
+            new_emails = data.get('emails', [])
+            
+            recipients_file = os.path.join(BASIC_FOLDER, 'emailx.txt')
+            existing_emails = []
+            
+            if os.path.exists(recipients_file):
+                with open(recipients_file, 'r') as f:
+                    existing_emails = [line.strip() for line in f if line.strip()]
+            
+            # Combine and remove duplicates
+            all_emails = list(set(existing_emails + new_emails))
+            duplicates = len(existing_emails) + len(new_emails) - len(all_emails)
+            
+            with open(recipients_file, 'w') as f:
+                for email in all_emails:
+                    f.write(f"{email}\n")
+            
+            return jsonify({'success': True, 'added': len(all_emails) - len(existing_emails), 'duplicates': duplicates, 'total': len(all_emails)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/campaign/recipients/delete', methods=['POST'])
 @login_required

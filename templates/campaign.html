@@ -591,7 +591,9 @@ function getDefaultTemplate() {
 // Load from emails
 function loadFromEmails() {
     console.log('📧 Loading from emails count...');
-    fetch('/api/campaign/from/list')
+    // Add cache-busting parameter to force fresh data
+    const cacheBuster = `?t=${Date.now()}`;
+    fetch(`/api/campaign/from/list${cacheBuster}`)
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -1009,8 +1011,11 @@ async function startFileUpload() {
     `;
     document.getElementById('uploadSuccessAlert').classList.remove('d-none');
     
-    // Refresh count
-    loadFromEmails();
+    // Refresh count with a small delay to ensure backend has written the file
+    // Also add cache-busting parameter to force fresh data
+    setTimeout(() => {
+        loadFromEmails();
+    }, 500);
     
     // Re-enable close button
     document.getElementById('fileUploadCloseBtn').disabled = false;
