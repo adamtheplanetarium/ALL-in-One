@@ -80,11 +80,20 @@ class CampaignSender:
     
     def get_next_smtp(self, smtp_servers):
         """Get next active SMTP server (round-robin), skip disabled ones"""
+        # Debug: Log what we received
+        self.log(f"🔍 DEBUG get_next_smtp: Total SMTPs={len(smtp_servers)}, Disabled={len(self.disabled_smtps)}", 'info')
+        
         # Filter active SMTPs that are not disabled
         active_smtps = [
             s for s in smtp_servers 
             if s.get('status') == 'active' and s['username'] not in self.disabled_smtps
         ]
+        
+        # Debug: Show what we filtered
+        self.log(f"🔍 DEBUG get_next_smtp: Active SMTPs after filter={len(active_smtps)}", 'info')
+        if smtp_servers:
+            for i, s in enumerate(smtp_servers[:3]):  # Show first 3 for debugging
+                self.log(f"🔍 DEBUG SMTP[{i}]: user={s.get('username', 'N/A')}, status={s.get('status', 'N/A')}, disabled={s.get('username', 'N/A') in self.disabled_smtps}", 'info')
         
         if not active_smtps:
             return None

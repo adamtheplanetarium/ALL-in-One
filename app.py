@@ -804,17 +804,28 @@ def start_campaign():
             for line in lines:
                 if line.strip():
                     parts = line.strip().split(',')
-                    if len(parts) >= 5:
+                    if len(parts) >= 4:  # At least host,port,username,password
+                        # Handle both old format (no status) and new format (with status)
+                        status = parts[4].strip() if len(parts) > 4 else 'active'  # Default to active if missing
+                        sent = int(parts[5].strip()) if len(parts) > 5 and parts[5].strip().isdigit() else 0
+                        
                         smtp_servers.append({
                             'host': parts[0].strip(),
                             'port': parts[1].strip(),
                             'username': parts[2].strip(),
                             'password': parts[3].strip(),
-                            'status': parts[4].strip() if len(parts) > 4 else 'inactive',
-                            'sent': int(parts[5].strip()) if len(parts) > 5 else 0
+                            'status': status,
+                            'sent': sent
                         })
         
+        # Debug logging
+        print(f"🔍 DEBUG: Loaded {len(smtp_servers)} total SMTP servers from smtp.txt")
+        for i, s in enumerate(smtp_servers[:5]):  # Show first 5
+            print(f"🔍 DEBUG SMTP[{i}]: {s['username']} - status='{s['status']}' port={s['port']}")
+        
         active_smtps = [s for s in smtp_servers if s['status'] == 'active']
+        print(f"🔍 DEBUG: Found {len(active_smtps)} active SMTP servers")
+        
         if not active_smtps:
             return jsonify({'success': False, 'error': 'No active SMTP servers found'}), 400
         
