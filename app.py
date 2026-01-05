@@ -562,21 +562,36 @@ def get_config():
 def save_config():
     try:
         data = request.get_json()
-        settings = data.get('settings', {})
+        # Accept settings directly or nested in 'settings' key
+        settings = data if 'settings' not in data else data.get('settings', {})
+        
+        print(f"💾 Saving configuration: {settings}")
         
         config_file = os.path.join(BASIC_FOLDER, 'config.ini')
         import configparser
         config = configparser.ConfigParser()
-        config.read(config_file)
+        
+        # Create config file if it doesn't exist
+        if not os.path.exists(config_file):
+            config['Settings'] = {}
+        else:
+            config.read(config_file)
+            if 'Settings' not in config:
+                config['Settings'] = {}
         
         for key, value in settings.items():
             config['Settings'][key] = str(value)
+            print(f"   {key} = {value}")
         
         with open(config_file, 'w') as f:
             config.write(f)
         
+        print(f"✅ Configuration saved to {config_file}")
         return jsonify({'success': True, 'message': 'Configuration saved successfully'})
     except Exception as e:
+        print(f"❌ Error saving config: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # Campaign From Emails Management

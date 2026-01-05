@@ -87,7 +87,7 @@
                             
                             <div class="col-md-6 mb-3">
                                 <label class="form-label"><strong>Subject</strong></label>
-                                <input type="text" class="form-control" id="subject" value="Account Verification Required - Action Needed">
+                                <input type="text" class="form-control" id="subject" value="Important Security Alert - Action Required">
                                 <small class="text-muted">Email subject line</small>
                             </div>
                         </div>
@@ -487,7 +487,7 @@ function loadConfig() {
                 
                 // Load with defaults if empty
                 document.getElementById('sendername').value = config.sendername || 'Support';
-                document.getElementById('subject').value = config.subject || 'Account Verification Required - Action Needed';
+                document.getElementById('subject').value = config.subject || 'Important Security Alert - Action Required';
                 document.getElementById('message').value = config.message || getDefaultTemplate();
                 document.getElementById('domainfrom').value = config.domainfrom || '';
                 document.getElementById('domainauth').value = config.domain_authentication || '';
@@ -510,7 +510,7 @@ function loadConfig() {
 function saveConfig() {
     const settings = {
         sendername: document.getElementById('sendername').value || 'Support',
-        subject: document.getElementById('subject').value || 'Account Verification Required - Action Needed',
+        subject: document.getElementById('subject').value || 'Important Security Alert - Action Required',
         message: document.getElementById('message').value || getDefaultTemplate(),
         domainfrom: document.getElementById('domainfrom').value,
         domain_authentication: document.getElementById('domainauth').value,
@@ -550,76 +550,29 @@ function loadDefaultTemplate() {
 
 // Get default HTML email template
 function getDefaultTemplate() {
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Verification</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4; padding: 20px;">
-        <tr>
-            <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background-color: #4CAF50; padding: 30px; text-align: center;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 28px;">Account Verification Required</h1>
-                        </td>
-                    </tr>
-                    
-                    <!-- Body -->
-                    <tr>
-                        <td style="padding: 40px 30px;">
-                            <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                                Dear Valued Customer,
-                            </p>
-                            
-                            <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                                We have detected unusual activity on your account and need to verify your identity to ensure your account security.
-                            </p>
-                            
-                            <p style="margin: 0 0 30px 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                                Please click the button below to verify your account within the next 24 hours:
-                            </p>
-                            
-                            <!-- Button -->
-                            <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                                <tr>
-                                    <td align="center" style="padding: 20px 0;">
-                                        <a href="#" style="display: inline-block; background-color: #4CAF50; color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 5px; font-size: 16px; font-weight: bold;">
-                                            Verify Account Now
-                                        </a>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <p style="margin: 30px 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                                If you did not request this verification, please contact our support team immediately.
-                            </p>
-                            
-                            <p style="margin: 0; color: #333333; font-size: 16px; line-height: 1.6;">
-                                Thank you for your prompt attention to this matter.
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f8f8f8; padding: 20px 30px; text-align: center; border-top: 1px solid #e0e0e0;">
-                            <p style="margin: 0 0 10px 0; color: #666666; font-size: 14px;">
-                                This is an automated message. Please do not reply to this email.
-                            </p>
-                            <p style="margin: 0; color: #999999; font-size: 12px;">
-                                © 2026 All rights reserved.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
+    return `<html>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #2c3e50;">Important Security Notice</h2>
+    
+    <p>Dear Valued Customer,</p>
+    
+    <p>We have detected unusual activity on your account and need to verify your identity immediately.</p>
+    
+    <p><strong>Action Required:</strong> Please verify your account information within 24 hours to avoid suspension.</p>
+    
+    <p style="text-align: center; margin: 30px 0;">
+        <a href="#" style="background-color: #3498db; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+            Verify Account Now
+        </a>
+    </p>
+    
+    <p>If you did not request this verification, please contact support immediately.</p>
+    
+    <br>
+    <p>Best regards,<br>Security Team</p>
+    
+    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+    <p style="color: #999; font-size: 12px;">This is an automated message. Please do not reply to this email.</p>
 </body>
 </html>`;
 }
