@@ -736,19 +736,44 @@ function processBulkRecipients() {
 function clearFromList() {
     if (confirm('Are you sure you want to delete ALL from emails? This action cannot be undone!')) {
         console.log('🗑️ Clearing all from emails...');
+        
+        // Show loading indicator
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'deleteLoadingOverlay';
+        loadingDiv.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; justify-content: center; align-items: center;';
+        loadingDiv.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center;">
+                <div class="spinner-border text-danger mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+                <h4 class="text-danger">Deleting All From Emails...</h4>
+                <p class="text-muted mb-0">Please wait...</p>
+            </div>
+        `;
+        document.body.appendChild(loadingDiv);
+        
         fetch('/api/campaign/from/clear', {method: 'POST'})
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     console.log('✅ All from emails deleted');
-                    loadFromEmails(); // Refresh count
-                    showAlert('All from emails have been deleted', 'warning');
+                    // Show success message briefly then reload
+                    loadingDiv.innerHTML = `
+                        <div style="background: white; padding: 30px; border-radius: 10px; text-align: center;">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                            <h4 class="text-success mt-3">All From Emails Deleted!</h4>
+                            <p class="text-muted mb-0">Refreshing page...</p>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
                 } else {
+                    document.body.removeChild(loadingDiv);
                     console.error('❌ Failed to clear from emails:', data);
                     showAlert(data.message || 'Failed to clear emails', 'danger');
                 }
             })
             .catch(err => {
+                document.body.removeChild(loadingDiv);
                 console.error('❌ Error clearing from emails:', err);
                 showAlert('Network error while clearing emails', 'danger');
             });
@@ -759,19 +784,44 @@ function clearFromList() {
 function clearRecipientsList() {
     if (confirm('Are you sure you want to delete ALL recipients? This action cannot be undone!')) {
         console.log('🗑️ Clearing all recipients...');
+        
+        // Show loading indicator
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'deleteLoadingOverlay';
+        loadingDiv.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; justify-content: center; align-items: center;';
+        loadingDiv.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center;">
+                <div class="spinner-border text-danger mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+                <h4 class="text-danger">Deleting All Recipients...</h4>
+                <p class="text-muted mb-0">Please wait...</p>
+            </div>
+        `;
+        document.body.appendChild(loadingDiv);
+        
         fetch('/api/campaign/recipients/clear', {method: 'POST'})
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     console.log('✅ All recipients deleted');
-                    loadRecipients(); // Refresh count
-                    showAlert('All recipients have been deleted', 'warning');
+                    // Show success message briefly then reload
+                    loadingDiv.innerHTML = `
+                        <div style="background: white; padding: 30px; border-radius: 10px; text-align: center;">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                            <h4 class="text-success mt-3">All Recipients Deleted!</h4>
+                            <p class="text-muted mb-0">Refreshing page...</p>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
                 } else {
+                    document.body.removeChild(loadingDiv);
                     console.error('❌ Failed to clear recipients:', data);
                     showAlert(data.message || 'Failed to clear recipients', 'danger');
                 }
             })
             .catch(err => {
+                document.body.removeChild(loadingDiv);
                 console.error('❌ Error clearing recipients:', err);
                 showAlert('Network error while clearing recipients', 'danger');
             });
