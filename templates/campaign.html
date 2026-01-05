@@ -325,6 +325,12 @@ function initCampaignSocket() {
     if (typeof io !== 'undefined') {
         campaignSocket = io();
         
+        // Remove existing listeners to prevent duplicates
+        campaignSocket.off('campaign_log');
+        campaignSocket.off('campaign_stats');
+        campaignSocket.off('from_count_update');
+        campaignSocket.off('campaign_complete');
+        
         campaignSocket.on('campaign_log', function(data) {
             addConsoleLog(data.message, data.type || 'info');
         });
@@ -345,10 +351,7 @@ function initCampaignSocket() {
             document.getElementById('stopBtn').style.display = 'none';
             addConsoleLog(`Campaign completed! Sent: ${data.sent}, Failed: ${data.failed}`, 'success');
             
-            // Refresh from email count to show final count after removal
-            setTimeout(() => {
-                loadFromEmails();
-            }, 1000);
+            // No need to reload - Socket.IO already updated counts in real-time
         });
     } else {
         setTimeout(initCampaignSocket, 100);
@@ -653,12 +656,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadRecipients();
     checkCampaignStatus();
     
-    // Poll for from email count updates every 10 seconds when campaign is running
-    setInterval(() => {
-        if (campaignRunning) {
-            loadFromEmails();
-        }
-    }, 10000);
+    // Socket.IO handles real-time count updates during campaign
+    // No polling needed - Socket.IO 'from_count_update' event updates counts automatically
 });
 </script>
 {% endblock %}
