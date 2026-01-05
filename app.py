@@ -1610,36 +1610,45 @@ def swap_recheck_results():
         # Get current active emails (these will become inactive)
         old_active = [email for email, status in status_dict.items() if status == 'active']
         
-        # Get working emails from recheck results (these will become active)
-        campaign_data = load_recheck_active()
-        if not campaign_data:
-            print("❌ No recheck campaign data file found")
-            return jsonify({'success': False, 'message': 'No recheck campaign data found. Please complete a recheck first.'}), 400
+        # Check if working_emails is provided in request body (real-time source)
+        request_data = request.get_json() or {}
+        working_emails = request_data.get('working_emails', [])
         
-        froms_tested = campaign_data.get('froms_tested', {})
-        if not froms_tested:
-            print("❌ No froms_tested data in campaign")
-            return jsonify({'success': False, 'message': 'No test data found in campaign'}), 400
-        
-        # Count all statuses for debugging
-        all_statuses = {}
-        for email, data in froms_tested.items():
-            status = data.get('status', 'unknown')
-            all_statuses[status] = all_statuses.get(status, 0) + 1
-        
-        print(f"📊 Campaign status breakdown: {all_statuses}")
-        print(f"📊 Total tested: {len(froms_tested)}")
-        
-        working_emails = [email for email, data in froms_tested.items() if data.get('status') == 'working']
-        
-        print(f"📊 Found {len(working_emails)} working emails in campaign data")
         if working_emails:
-            print(f"📊 First 5 working emails: {working_emails[:5]}")
+            print(f"📧 Using working emails from frontend (real-time): {len(working_emails)} emails")
+            print(f"📧 First 5: {working_emails[:5]}")
+        else:
+            # Fallback: Get working emails from recheck campaign file
+            print("📁 No working_emails in request, checking campaign file...")
+            campaign_data = load_recheck_active()
+            if not campaign_data:
+                print("❌ No recheck campaign data file found")
+                return jsonify({'success': False, 'message': 'No recheck campaign data found. Please complete a recheck first.'}), 400
+            
+            froms_tested = campaign_data.get('froms_tested', {})
+            if not froms_tested:
+                print("❌ No froms_tested data in campaign")
+                return jsonify({'success': False, 'message': 'No test data found in campaign'}), 400
+            
+            # Count all statuses for debugging
+            all_statuses = {}
+            for email, data in froms_tested.items():
+                status = data.get('status', 'unknown')
+                all_statuses[status] = all_statuses.get(status, 0) + 1
+            
+            print(f"📊 Campaign status breakdown: {all_statuses}")
+            print(f"📊 Total tested: {len(froms_tested)}")
+            
+            working_emails = [email for email, data in froms_tested.items() if data.get('status') == 'working']
+            
+            print(f"📊 Found {len(working_emails)} working emails in campaign data")
+            if working_emails:
+                print(f"📊 First 5 working emails: {working_emails[:5]}")
         
         if not working_emails:
             return jsonify({
                 'success': False, 
-                'message': f'No working emails found in results. Campaign tested {len(froms_tested)} emails. Status breakdown: {all_statuses}'
+                'message': f'No working emails found. Please wait for responses or provide working_emails in request.'
             }), 400
         
         # Step 1: Move ALL old active emails to inactive

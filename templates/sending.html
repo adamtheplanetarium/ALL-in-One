@@ -2611,9 +2611,26 @@ function swapRecheckResults() {
     console.log('🔄 Starting swap operation...');
     console.log('📊 Current recheckResults:', recheckResults);
     
+    // Get working emails from real-time log (this is the source of truth)
+    const workingLog = document.getElementById('recheckWorkingLog');
+    const workingEmails = workingLog.value
+        .split('\n')
+        .map(email => email.trim())
+        .filter(email => email && email.includes('@'));
+    
+    console.log(`📧 Working emails from real-time log: ${workingEmails.length} emails`);
+    console.log(`📧 First 5 emails:`, workingEmails.slice(0, 5));
+    
+    if (workingEmails.length === 0) {
+        console.error('❌ No working emails found in real-time log');
+        showAlert('recheckAlertContainer', 'No working emails found. Please wait for responses or check the working log.', 'danger');
+        return;
+    }
+    
     fetch('/api/recheck/swap_results', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ working_emails: workingEmails })
     })
     .then(res => {
         console.log('📥 Swap response status:', res.status);
