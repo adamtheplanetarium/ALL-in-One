@@ -956,10 +956,6 @@ async function startFileUpload() {
             await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
         }
     }
-            hasError = true;
-            break;
-        }
-    }
     
     if (hasError) {
         alert(`Upload stopped. Processed: ${processed.toLocaleString()} emails, Added: ${added.toLocaleString()}`);
