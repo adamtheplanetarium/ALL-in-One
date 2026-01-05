@@ -796,83 +796,79 @@ async function startFileUpload() {
     document.getElementById('fileUploadCancelBtn').disabled = true;
     document.getElementById('uploadStatusText').textContent = 'Uploading emails to server...';
     
-    // Upload in smaller chunks (5,000 emails per request for better reliability)
-    const chunkSize = 5000;
+    // Upload in parallel batches (10K emails per chunk, 5 concurrent requests)
+    const chunkSize = 10000;
+    const parallelLimit = 5; // Upload 5 chunks at once
     let processed = 0;
     let added = 0;
     let duplicates = 0;
+    let hasError = false;
     
+    const totalChunks = Math.ceil(parsedEmails.length / chunkSize);
+    const chunks = [];
+    
+    // Prepare all chunks
     for (let i = 0; i < parsedEmails.length; i += chunkSize) {
-        const chunk = parsedEmails.slice(i, i + chunkSize);
-        const chunkNum = Math.floor(i / chunkSize) + 1;
-        const totalChunks = Math.ceil(parsedEmails.length / chunkSize);
+        chunks.push(parsedEmails.slice(i, i + chunkSize));
+    }
+    
+    console.log(`📦 Split into ${totalChunks} chunks, uploading ${parallelLimit} at a time`);
+    
+    // Upload chunks in parallel batches
+    for (let i = 0; i < chunks.length; i += parallelLimit) {
+        if (hasError) break;
         
-        console.log(`📤 Uploading chunk ${chunkNum}/${totalChunks} (${chunk.length} emails)`);
+        const batch = chunks.slice(i, i + parallelLimit);
+        const batchStart = i + 1;
+        const batchEnd = Math.min(i + parallelLimit, chunks.length);
+        
+        console.log(`📤 Uploading batch: chunks ${batchStart}-${batchEnd} of ${totalChunks}`);
         document.getElementById('uploadStatusText').textContent = 
-            `Uploading chunk ${chunkNum} of ${totalChunks}...`;
+            `Uploading chunks ${batchStart}-${batchEnd} of ${totalChunks}...`;
+        
+        // Upload all chunks in this batch concurrently
+        const uploadPromises = batch.map((chunk, batchIndex) => {
+            const chunkNum = i + batchIndex + 1;
+            return uploadChunk(chunk, chunkNum, totalChunks);
+        });
         
         try {
-            // Add timeout to fetch request
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+            const results = await Promise.all(uploadPromises);
             
-            console.log(`   🔄 Sending POST request to /api/campaign/from/bulk...`);
-            const response = await fetch('/api/campaign/from/bulk', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({emails: chunk}),
-                signal: controller.signal
+            // Aggregate results
+            results.forEach((result, idx) => {
+                if (result.success) {
+                    added += result.added;
+                    duplicates += result.duplicates;
+                    processed += batch[idx].length;
+                    console.log(`✅ Chunk ${i + idx + 1} complete: +${result.added} new, ${result.duplicates} duplicates`);
+                } else {
+                    hasError = true;
+                }
             });
             
-            clearTimeout(timeoutId);
-            
-            console.log(`   📡 Response status: ${response.status}`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log(`   📊 Response data:`, data);
-            
-            if (data.success) {
-                added += data.added;
-                duplicates += data.duplicates;
-                processed += chunk.length;
-                
-                // Update progress
-                const progress = (processed / parsedEmails.length * 100).toFixed(1);
-                document.getElementById('uploadProgressBar').style.width = progress + '%';
-                document.getElementById('uploadProgressText').textContent = progress + '%';
-                document.getElementById('emailsProcessed').textContent = processed.toLocaleString();
-                document.getElementById('emailsValid').textContent = added.toLocaleString();
-                document.getElementById('emailsDuplicates').textContent = duplicates.toLocaleString();
-                
-                console.log(`✅ Chunk ${chunkNum} complete: +${data.added} new, ${data.duplicates} duplicates`);
-            } else {
-                throw new Error(data.message || data.error || 'Upload failed');
-            }
-            
-            // Small delay between chunks to prevent overwhelming server
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Update progress after batch
+            const progress = (processed / parsedEmails.length * 100).toFixed(1);
+            document.getElementById('uploadProgressBar').style.width = progress + '%';
+            document.getElementById('uploadProgressText').textContent = progress + '%';
+            document.getElementById('emailsProcessed').textContent = processed.toLocaleString();
+            document.getElementById('emailsValid').textContent = added.toLocaleString();
+            document.getElementById('emailsDuplicates').textContent = duplicates.toLocaleString();
             
         } catch (error) {
-            console.error(`❌ Error uploading chunk ${chunkNum}:`, error);
-            
-            let errorMsg = error.message;
-            if (error.name === 'AbortError') {
-                errorMsg = 'Request timeout - server took too long to respond';
-            }
-            
-            alert(`Upload failed at chunk ${chunkNum}/${totalChunks}:\n${errorMsg}\n\nProcessed so far: ${processed.toLocaleString()} emails\nAdded: ${added.toLocaleString()}\n\nYou can try again with the remaining emails.`);
-            
-            // Re-enable controls
-            document.getElementById('fileUploadCloseBtn').disabled = false;
-            document.getElementById('fileUploadCancelBtn').disabled = false;
-            document.getElementById('fileUploadCancelBtn').textContent = 'Close';
-            document.getElementById('uploadStatusText').textContent = `❌ Upload stopped at chunk ${chunkNum}`;
-            return;
+            console.error(`❌ Batch upload error:`, error);
+            hasError = true;
+            break;
         }
+    }
+    
+    if (hasError) {
+        alert(`Upload stopped. Processed: ${processed.toLocaleString()} emails, Added: ${added.toLocaleString()}`);
+        document.getElementById('fileUploadCloseBtn').disabled = false;
+        document.getElementById('fileUploadCancelBtn').disabled = false;
+        document.getElementById('fileUploadCancelBtn').textContent = 'Close';
+        document.getElementById('uploadStatusText').textContent = `⚠️ Upload incomplete`;
+        return;
     }
     
     // Upload complete
@@ -899,6 +895,46 @@ async function startFileUpload() {
     document.getElementById('fileUploadCloseBtn').disabled = false;
     document.getElementById('fileUploadCancelBtn').disabled = false;
     document.getElementById('fileUploadCancelBtn').textContent = 'Close';
+}
+
+// Helper function to upload a single chunk
+async function uploadChunk(chunk, chunkNum, totalChunks) {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+        
+        const response = await fetch('/api/campaign/from/bulk', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({emails: chunk}),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.message || data.error || 'Upload failed');
+        }
+        
+        return {
+            success: true,
+            added: data.added,
+            duplicates: data.duplicates
+        };
+        
+    } catch (error) {
+        console.error(`❌ Chunk ${chunkNum} failed:`, error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
 }
 
 function showRecipientsFileUpload() {
