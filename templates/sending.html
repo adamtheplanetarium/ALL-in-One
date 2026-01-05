@@ -2851,6 +2851,12 @@ function applyBulkStatusChange(emails, status) {
 
 // Socket.IO listeners for recheck events
 if (typeof socket !== 'undefined') {
+    // Remove existing listeners to prevent duplicates
+    socket.off('recheck_progress');
+    socket.off('recheck_log');
+    socket.off('recheck_sending_complete');
+    socket.off('recheck_response_detected');
+    
     socket.on('recheck_progress', function(data) {
         // Update progress bar only (Phase 1: Sending)
         const percent = (data.sent / data.total * 100).toFixed(0);
