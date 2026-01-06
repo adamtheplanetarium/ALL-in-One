@@ -979,9 +979,10 @@ async function startFileUpload() {
     document.getElementById('fileUploadCancelBtn').disabled = true;
     document.getElementById('uploadStatusText').textContent = 'Uploading emails to server...';
     
-    // Parallel upload mode with larger chunks for faster processing
+    // Parallel upload mode - REDUCED from 50 to 10 due to lock serialization on Render
+    // With thread-safe locks, 50 parallel requests queue up causing 25s timeouts
     const chunkSize = 10000; // 10K emails per chunk
-    const parallelLimit = 50; // Upload 50 chunks at once
+    const parallelLimit = 10; // REDUCED: Upload 10 chunks at once (was 50)
     let processed = 0;
     let added = 0;
     let duplicates = 0;
@@ -1089,7 +1090,9 @@ async function startFileUpload() {
 async function uploadChunk(chunk, chunkNum, totalChunks) {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout (Render free tier limit is 30s)
+        // INCREASED timeout from 25s to 60s to handle lock serialization delays
+        // With locks, requests wait in queue - need longer timeout
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
         
         const response = await fetch('/api/campaign/from/bulk', {
             method: 'POST',
@@ -1118,7 +1121,7 @@ async function uploadChunk(chunk, chunkNum, totalChunks) {
         
     } catch (error) {
         const errorMsg = error.name === 'AbortError' 
-            ? 'Request timeout (25s limit exceeded)' 
+            ? 'Request timeout (60s limit exceeded)' 
             : error.message;
         
         return {

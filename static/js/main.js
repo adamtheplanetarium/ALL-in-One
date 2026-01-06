@@ -73,17 +73,17 @@ window.appUtils = {
 };
 
 // Initialize Socket.IO connection with crash-prevention for render.com
+// Declare variables outside the block for proper scope
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+let isIntentionalDisconnect = false;
+
 try {
     if (typeof io !== 'undefined') {
         // Check if socket already exists (prevent multiple connections)
         if (window.socket && window.socket.connected) {
             console.log('✅ Socket.IO already connected - reusing existing connection');
         } else {
-            // Track reconnection attempts to prevent infinite loops
-            let reconnectAttempts = 0;
-            const MAX_RECONNECT_ATTEMPTS = 10;
-            let isIntentionalDisconnect = false;
-            
             window.socket = io({
                 transports: ['polling', 'websocket'],  // Start with polling for better compatibility
                 reconnection: true,
