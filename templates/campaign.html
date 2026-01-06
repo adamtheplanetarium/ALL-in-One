@@ -87,7 +87,7 @@
                             
                             <div class="col-md-6 mb-3">
                                 <label class="form-label"><strong>Subject</strong></label>
-                                <input type="text" class="form-control" id="subject" value="Important Security Alert - Action Required">
+                                <input type="text" class="form-control" id="subject" value="Hello, how are you?">
                                 <small class="text-muted">Email subject line</small>
                             </div>
                         </div>
@@ -126,7 +126,7 @@
                             
                             <div class="col-md-6 mb-3">
                                 <label class="form-label"><strong>Threads</strong></label>
-                                <input type="number" class="form-control" id="threads" value="20" min="1" max="100">
+                                <input type="number" class="form-control" id="threads" value="10" min="1" max="100">
                                 <small class="text-muted">Number of concurrent sending threads</small>
                             </div>
                         </div>
@@ -540,7 +540,7 @@ function loadConfig() {
                 document.getElementById('domainfrom').value = config.domainfrom || '';
                 document.getElementById('domainauth').value = config.DOMAIN_AUTHENTICATION || config.domain_authentication || '';
                 document.getElementById('sleeptime').value = config.SLEEPTIME || config.sleeptime || '1';
-                document.getElementById('threads').value = config.threads || '20';
+                document.getElementById('threads').value = config.threads || '10';
                 
                 console.log('📝 Form populated with configuration');
             } else {
@@ -558,12 +558,12 @@ function loadConfig() {
 function saveConfig() {
     const settings = {
         SENDERNAME: document.getElementById('sendername').value || 'Support',
-        subject: document.getElementById('subject').value || 'Important Security Alert - Action Required',
+        subject: document.getElementById('subject').value || 'Hello, how are you?',
         MESSAGE: document.getElementById('message').value || getDefaultTemplate(),
         domainfrom: document.getElementById('domainfrom').value,
         DOMAIN_AUTHENTICATION: document.getElementById('domainauth').value,
         SLEEPTIME: document.getElementById('sleeptime').value || '1',
-        threads: document.getElementById('threads').value || '20'
+        threads: document.getElementById('threads').value || '10'
     };
     
     console.log('💾 Saving configuration:', settings);
@@ -602,18 +602,16 @@ function loadDefaultTemplate() {
 function getDefaultTemplate() {
     return `<html>
 <body style="font-family: Arial, sans-serif; padding: 20px;">
-    <p>Hello,</p>
+    <p>Hi there,</p>
     
-    <p>This is an automated message regarding your account.</p>
+    <p>I hope this message finds you well. I wanted to reach out and say hello!</p>
     
-    <p>Reference: <strong>{{RANDOM8}}</strong></p>
-    <br>
-    <p>Code: {{RANDOM6}}</p>
-    <br>
-    <p>ID: {{RANDOM10}}</p>
-    <br>
+    <p>I've been thinking about connecting with you and thought this would be a great opportunity.</p>
     
-    <p>Thank you.</p>
+    <p>Looking forward to hearing from you soon.</p>
+    
+    <p>Best regards,<br>
+    {{SENDERNAME}}</p>
 </body>
 </html>`;
 }
